@@ -1,8 +1,8 @@
-package com.ianthetechie.core
+package com.maidsafe.core
 
-import uniffi.foobar.Calculator
-import uniffi.foobar.ComputationResult
-import uniffi.foobar.safeAdditionOperator
+import uniffi.autonomi.Calculator
+import uniffi.autonomi.ComputationResult
+import uniffi.autonomi.safeAdditionOperator
 
 class SafeCalculator {
   // Functional core; imperative shell. This is purely internal state with an imperative API

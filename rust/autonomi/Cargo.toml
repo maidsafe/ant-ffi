@@ -1,5 +1,5 @@
 [package]
-name = "foobar"
+name = "ant-ffi"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
-autonomi = "0.6.1"
+autonomi = { package = "autonomi", version = "0.6.1" }
 bytes = "1.0.1"
 rmp-serde = "1.1.1"
 self_encryption = "0.34.0"

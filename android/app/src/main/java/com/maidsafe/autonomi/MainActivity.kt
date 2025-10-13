@@ -1,4 +1,4 @@
-package com.ianthetechie.foobar
+package com.maidsafe.autonomi
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,8 +10,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.ianthetechie.core.SafeCalculator
-import com.ianthetechie.foobar.ui.theme.FoobarTheme
+import com.maidsafe.core.SafeCalculator
+import com.maidsafe.autonomi.ui.theme.AutonomiTheme
 
 class MainActivity : ComponentActivity() {
   private val calculator = SafeCalculator()
@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
 
     setContent {
-      FoobarTheme {
+      AutonomiTheme {
         // A surface container using the 'background' color from the theme
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
           Greeting("🦀says 1 + 1 = ${calculator.add(1,1)}")
@@ -38,5 +38,5 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
-  FoobarTheme { Greeting("Android") }
+  AutonomiTheme { Greeting("Android") }
 }

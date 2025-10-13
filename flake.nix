@@ -43,6 +43,7 @@
             toolchain
 
             # Android
+            jdk # For gradle(w)
             ktlint
             ktfmt
             cargo-ndk

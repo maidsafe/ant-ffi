@@ -1,7 +1,7 @@
-package com.ianthetechie.core
+package com.maidsafe.core
 
-import uniffi.foobar.BinaryOperator
-import uniffi.foobar.ComputationException
+import uniffi.autonomi.BinaryOperator
+import uniffi.autonomi.ComputationException
 
 class SafeMultiply : BinaryOperator {
   override fun perform(lhs: Long, rhs: Long): Long {

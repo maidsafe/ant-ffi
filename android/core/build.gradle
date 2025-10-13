@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = 'com.ianthetechie.foobar.core'
+    namespace = 'com.maidsafe.autonomi.core'
     compileSdk = 36
     ndkVersion = "26.2.11394342"
 
@@ -51,15 +51,15 @@ dependencies {
 
 cargoNdk {
     module  = "../rust"  // Directory containing Cargo.toml
-    librariesNames = ["libfoobar.so"]
-    extraCargoBuildArguments = ["-p", "foobar"]
+    librariesNames = ["libautonomi_uniffi.so"]
+    extraCargoBuildArguments = ["-p", "ant-ffi"]
 }
 
 android.libraryVariants.all { variant ->
     def bDir = layout.buildDirectory.dir("generated/source/uniffi/${variant.name}/java").get()
     def generateBindings = tasks.register("generate${variant.name.capitalize()}UniFFIBindings", Exec) {
         workingDir '../../rust'
-        commandLine 'cargo', 'run', '-p', 'uniffi-bindgen', 'generate', '--library', '../android/core/src/main/jniLibs/arm64-v8a/libfoobar.so', '--language', 'kotlin', '--out-dir', bDir
+        commandLine 'cargo', 'run', '-p', 'uniffi-bindgen', 'generate', '--library', '../android/core/src/main/jniLibs/arm64-v8a/libautonomi_uniffi.so', '--language', 'kotlin', '--out-dir', bDir
 
         dependsOn "buildCargoNdk${variant.name.capitalize()}"
     }

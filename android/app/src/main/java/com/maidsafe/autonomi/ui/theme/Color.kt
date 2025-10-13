@@ -1,4 +1,4 @@
-package com.ianthetechie.foobar.ui.theme
+package com.maidsafe.autonomi.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

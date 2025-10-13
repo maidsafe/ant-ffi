@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = 'com.ianthetechie.foobar'
+    namespace = 'com.maidsafe.autonomi'
     compileSdk = 36
 
     defaultConfig {
-        applicationId "com.ianthetechie.foobar"
+        applicationId "com.maidsafe.autonomi"
         minSdk = 29
         targetSdk = 36
         versionCode 1

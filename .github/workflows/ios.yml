@@ -46,8 +46,8 @@ jobs:
     - name: 'Upload Artifact'
       uses: actions/upload-artifact@v4
       with:
-        name: libfoobar-rs.xcframework.zip
-        path: rust/target/ios/libfoobar-rs.xcframework.zip
+        name: libautonomi-rs.xcframework.zip
+        path: rust/target/ios/libautonomi-rs.xcframework.zip
         retention-days: 5
 
   test:
@@ -59,7 +59,7 @@ jobs:
     strategy:
       matrix:
         scheme: [
-          Foobar
+          Autonomi
         ]
         destination: [
           # TODO: Add more destinations
@@ -70,14 +70,14 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v4
       
-    - name: Download libfoobar-rs.xcframework
+    - name: Download libautonomi-rs.xcframework
       uses: actions/download-artifact@v4
       with:
         path: rust
-        name: libfoobar-rs.xcframework.zip
+        name: libautonomi-rs.xcframework.zip
 
-    - name: Unzip libfoobar-rs.xcframework
-      run: ditto -x -k libfoobar-rs.xcframework.zip target/ios/
+    - name: Unzip libautonomi-rs.xcframework
+      run: ditto -x -k libautonomi-rs.xcframework.zip target/ios/
       working-directory: rust
 
     - uses: maxim-lobanov/setup-xcode@v1

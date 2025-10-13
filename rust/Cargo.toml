@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "foobar",
+    "autonomi",
     "uniffi-bindgen",
     "uniffi-bindgen-swift",
 ]

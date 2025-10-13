@@ -6,9 +6,9 @@
  * This solution is STUPIDLY INEFFICIENT and will probably contribute to global climate change since
  * an Android emulator uses like two whole CPU cores when idling.
  */
-package com.ianthetechie.foobar.core
+package com.maidsafe.autonomi.core
 
-import com.ianthetechie.core.SafeCalculator
+import com.maidsafe.core.SafeCalculator
 import org.junit.Assert.*
 import org.junit.Test
 

@@ -1,4 +1,4 @@
-@testable import Foobar
+@testable import Autonomi
 import XCTest
 
 final class MyLibraryTests: XCTestCase {

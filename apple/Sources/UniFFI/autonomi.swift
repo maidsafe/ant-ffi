@@ -7,8 +7,8 @@ import Foundation
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into
 // this module. This is a bit of light hackery to work with both.
-#if canImport(foobarFFI)
-import foobarFFI
+#if canImport(autonomiFFI)
+import autonomiFFI
 #endif
 
 fileprivate extension RustBuffer {
@@ -25,13 +25,13 @@ fileprivate extension RustBuffer {
     }
 
     static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
-        try! rustCall { ffi_foobar_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
+        try! rustCall { ffi_autonomi_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
     }
 
     // Frees the buffer in place.
     // The buffer must not be used after this is called.
     func deallocate() {
-        try! rustCall { ffi_foobar_rustbuffer_free(self, $0) }
+        try! rustCall { ffi_autonomi_rustbuffer_free(self, $0) }
     }
 }
 
@@ -531,7 +531,7 @@ open class BinaryOperatorImpl:
     @_documentation(visibility: private)
 #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_foobar_fn_clone_binaryoperator(self.pointer, $0) }
+        return try! rustCall { uniffi_autonomi_fn_clone_binaryoperator(self.pointer, $0) }
     }
     // No primary constructor declared for this class.
 
@@ -540,7 +540,7 @@ open class BinaryOperatorImpl:
             return
         }
 
-        try! rustCall { uniffi_foobar_fn_free_binaryoperator(pointer, $0) }
+        try! rustCall { uniffi_autonomi_fn_free_binaryoperator(pointer, $0) }
     }
 
     
@@ -548,7 +548,7 @@ open class BinaryOperatorImpl:
     
 open func perform(lhs: Int64, rhs: Int64)throws  -> Int64 {
     return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_foobar_fn_method_binaryoperator_perform(self.uniffiClonePointer(),
+    uniffi_autonomi_fn_method_binaryoperator_perform(self.uniffiClonePointer(),
         FfiConverterInt64.lower(lhs),
         FfiConverterInt64.lower(rhs),$0
     )
@@ -608,7 +608,7 @@ fileprivate struct UniffiCallbackInterfaceBinaryOperator {
 }
 
 private func uniffiCallbackInitBinaryOperator() {
-    uniffi_foobar_fn_init_callback_vtable_binaryoperator(&UniffiCallbackInterfaceBinaryOperator.vtable)
+    uniffi_autonomi_fn_init_callback_vtable_binaryoperator(&UniffiCallbackInterfaceBinaryOperator.vtable)
 }
 
 #if swift(>=5.8)
@@ -732,12 +732,12 @@ open class Calculator:
     @_documentation(visibility: private)
 #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_foobar_fn_clone_calculator(self.pointer, $0) }
+        return try! rustCall { uniffi_autonomi_fn_clone_calculator(self.pointer, $0) }
     }
 public convenience init() {
     let pointer =
         try! rustCall() {
-    uniffi_foobar_fn_constructor_calculator_new($0
+    uniffi_autonomi_fn_constructor_calculator_new($0
     )
 }
     self.init(unsafeFromRawPointer: pointer)
@@ -748,7 +748,7 @@ public convenience init() {
             return
         }
 
-        try! rustCall { uniffi_foobar_fn_free_calculator(pointer, $0) }
+        try! rustCall { uniffi_autonomi_fn_free_calculator(pointer, $0) }
     }
 
     
@@ -759,7 +759,7 @@ public convenience init() {
      */
 open func calculate(op: BinaryOperator, lhs: Int64, rhs: Int64)throws  -> Calculator {
     return try  FfiConverterTypeCalculator.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_foobar_fn_method_calculator_calculate(self.uniffiClonePointer(),
+    uniffi_autonomi_fn_method_calculator_calculate(self.uniffiClonePointer(),
         FfiConverterTypeBinaryOperator.lower(op),
         FfiConverterInt64.lower(lhs),
         FfiConverterInt64.lower(rhs),$0
@@ -774,7 +774,7 @@ open func calculate(op: BinaryOperator, lhs: Int64, rhs: Int64)throws  -> Calcul
      */
 open func calculateMore(op: BinaryOperator, rhs: Int64)throws  -> Calculator {
     return try  FfiConverterTypeCalculator.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_foobar_fn_method_calculator_calculate_more(self.uniffiClonePointer(),
+    uniffi_autonomi_fn_method_calculator_calculate_more(self.uniffiClonePointer(),
         FfiConverterTypeBinaryOperator.lower(op),
         FfiConverterInt64.lower(rhs),$0
     )
@@ -783,7 +783,7 @@ open func calculateMore(op: BinaryOperator, rhs: Int64)throws  -> Calculator {
     
 open func lastResult() -> ComputationResult? {
     return try!  FfiConverterOptionTypeComputationResult.lift(try! rustCall() {
-    uniffi_foobar_fn_method_calculator_last_result(self.uniffiClonePointer(),$0
+    uniffi_autonomi_fn_method_calculator_last_result(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -886,12 +886,12 @@ open class SafeAddition:
     @_documentation(visibility: private)
 #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_foobar_fn_clone_safeaddition(self.pointer, $0) }
+        return try! rustCall { uniffi_autonomi_fn_clone_safeaddition(self.pointer, $0) }
     }
 public convenience init() {
     let pointer =
         try! rustCall() {
-    uniffi_foobar_fn_constructor_safeaddition_new($0
+    uniffi_autonomi_fn_constructor_safeaddition_new($0
     )
 }
     self.init(unsafeFromRawPointer: pointer)
@@ -902,7 +902,7 @@ public convenience init() {
             return
         }
 
-        try! rustCall { uniffi_foobar_fn_free_safeaddition(pointer, $0) }
+        try! rustCall { uniffi_autonomi_fn_free_safeaddition(pointer, $0) }
     }
 
     
@@ -910,7 +910,7 @@ public convenience init() {
     
 open func perform(lhs: Int64, rhs: Int64)throws  -> Int64 {
     return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_foobar_fn_method_safeaddition_perform(self.uniffiClonePointer(),
+    uniffi_autonomi_fn_method_safeaddition_perform(self.uniffiClonePointer(),
         FfiConverterInt64.lower(lhs),
         FfiConverterInt64.lower(rhs),$0
     )
@@ -1015,12 +1015,12 @@ open class SafeDivision:
     @_documentation(visibility: private)
 #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_foobar_fn_clone_safedivision(self.pointer, $0) }
+        return try! rustCall { uniffi_autonomi_fn_clone_safedivision(self.pointer, $0) }
     }
 public convenience init() {
     let pointer =
         try! rustCall() {
-    uniffi_foobar_fn_constructor_safedivision_new($0
+    uniffi_autonomi_fn_constructor_safedivision_new($0
     )
 }
     self.init(unsafeFromRawPointer: pointer)
@@ -1031,7 +1031,7 @@ public convenience init() {
             return
         }
 
-        try! rustCall { uniffi_foobar_fn_free_safedivision(pointer, $0) }
+        try! rustCall { uniffi_autonomi_fn_free_safedivision(pointer, $0) }
     }
 
     
@@ -1039,7 +1039,7 @@ public convenience init() {
     
 open func perform(lhs: Int64, rhs: Int64)throws  -> Int64 {
     return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_foobar_fn_method_safedivision_perform(self.uniffiClonePointer(),
+    uniffi_autonomi_fn_method_safedivision_perform(self.uniffiClonePointer(),
         FfiConverterInt64.lower(lhs),
         FfiConverterInt64.lower(rhs),$0
     )
@@ -1324,13 +1324,13 @@ fileprivate struct FfiConverterOptionTypeComputationResult: FfiConverterRustBuff
 }
 public func safeAdditionOperator() -> BinaryOperator {
     return try!  FfiConverterTypeBinaryOperator.lift(try! rustCall() {
-    uniffi_foobar_fn_func_safe_addition_operator($0
+    uniffi_autonomi_fn_func_safe_addition_operator($0
     )
 })
 }
 public func safeDivisionOperator() -> BinaryOperator {
     return try!  FfiConverterTypeBinaryOperator.lift(try! rustCall() {
-    uniffi_foobar_fn_func_safe_division_operator($0
+    uniffi_autonomi_fn_func_safe_division_operator($0
     )
 })
 }
@@ -1346,41 +1346,41 @@ private var initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
     let bindings_contract_version = 26
     // Get the scaffolding contract version by calling the into the dylib
-    let scaffolding_contract_version = ffi_foobar_uniffi_contract_version()
+    let scaffolding_contract_version = ffi_autonomi_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_foobar_checksum_func_safe_addition_operator() != 2550) {
+    if (uniffi_autonomi_checksum_func_safe_addition_operator() != 2550) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_func_safe_division_operator() != 26772) {
+    if (uniffi_autonomi_checksum_func_safe_division_operator() != 26772) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_method_binaryoperator_perform() != 14159) {
+    if (uniffi_autonomi_checksum_method_binaryoperator_perform() != 14159) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_method_calculator_calculate() != 63226) {
+    if (uniffi_autonomi_checksum_method_calculator_calculate() != 63226) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_method_calculator_calculate_more() != 55050) {
+    if (uniffi_autonomi_checksum_method_calculator_calculate_more() != 55050) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_method_calculator_last_result() != 48598) {
+    if (uniffi_autonomi_checksum_method_calculator_last_result() != 48598) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_method_safeaddition_perform() != 41639) {
+    if (uniffi_autonomi_checksum_method_safeaddition_perform() != 41639) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_method_safedivision_perform() != 11259) {
+    if (uniffi_autonomi_checksum_method_safedivision_perform() != 11259) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_constructor_calculator_new() != 50473) {
+    if (uniffi_autonomi_checksum_constructor_calculator_new() != 50473) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_constructor_safeaddition_new() != 7323) {
+    if (uniffi_autonomi_checksum_constructor_safeaddition_new() != 7323) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_foobar_checksum_constructor_safedivision_new() != 18654) {
+    if (uniffi_autonomi_checksum_constructor_safedivision_new() != 18654) {
         return InitializationResult.apiChecksumMismatch
     }
 

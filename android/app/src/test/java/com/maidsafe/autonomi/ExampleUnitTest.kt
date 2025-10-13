@@ -1,4 +1,4 @@
-package com.ianthetechie.foobar
+package com.maidsafe.autonomi
 
 import org.junit.Assert.*
 import org.junit.Test
