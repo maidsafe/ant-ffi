@@ -1,7 +1,7 @@
 # See https://rust-lang.github.io/rustup/overrides.html for details on how this file works
 # and how you can override the choices made herein.
 #
-# Note that we UniFFI also sets their own toolchain (see https://github.com/mozilla/uniffi-rs/blob/main/rust-toolchain.toml).
+# Note that UniFFI also sets their own toolchain (see https://github.com/mozilla/uniffi-rs/blob/main/rust-toolchain.toml).
 # We will attempt to track stable unless we find that this breaks something.
 # The iOS targets are easy and well-known, but the Android targets take a bit more work to deduce.
 # We have drawn our list from https://github.com/mozilla/rust-android-gradle.
@@ -26,3 +26,4 @@ targets = [
     "x86_64-pc-windows-msvc",
 ]
 components = ["clippy", "rustfmt"]
+profile = "default"
