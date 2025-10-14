@@ -12,7 +12,7 @@ let binaryTarget: Target = .binaryTarget(
     // upload it somewhere (usually with your release), and update Package.swift.
     // This will probably be the subject of a future blog.
     // Again, see Ferrostar for a more complex example, including more advanced GitHub actions.
-    path: "./rust/target/ios/libautonomi-rs.xcframework"
+    path: "./rust/target/ios/libant_ffi-rs.xcframework"
 )
 
 let package = Package(

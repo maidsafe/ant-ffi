@@ -46,8 +46,8 @@ jobs:
     - name: 'Upload Artifact'
       uses: actions/upload-artifact@v4
       with:
-        name: libautonomi-rs.xcframework.zip
-        path: rust/target/ios/libautonomi-rs.xcframework.zip
+        name: libant_ffi-rs.xcframework.zip
+        path: rust/target/ios/libant_ffi-rs.xcframework.zip
         retention-days: 5
 
   test:
@@ -70,14 +70,14 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v4
       
-    - name: Download libautonomi-rs.xcframework
+    - name: Download libant_ffi-rs.xcframework
       uses: actions/download-artifact@v4
       with:
         path: rust
-        name: libautonomi-rs.xcframework.zip
+        name: libant_ffi-rs.xcframework.zip
 
-    - name: Unzip libautonomi-rs.xcframework
-      run: ditto -x -k libautonomi-rs.xcframework.zip target/ios/
+    - name: Unzip libant_ffi-rs.xcframework
+      run: ditto -x -k libant_ffi-rs.xcframework.zip target/ios/
       working-directory: rust
 
     - uses: maxim-lobanov/setup-xcode@v1

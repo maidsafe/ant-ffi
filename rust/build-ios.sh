@@ -64,12 +64,13 @@ build_xcframework() {
   fi
 }
 
-basename=autonomi
+basename=ant-ffi
+basename_underscore=ant_ffi
 
 cargo build -p $basename --lib --release --target x86_64-apple-ios
 cargo build -p $basename --lib --release --target aarch64-apple-ios-sim
 cargo build -p $basename --lib --release --target aarch64-apple-ios
 
-generate_ffi $basename
-create_fat_simulator_lib $basename
-build_xcframework $basename
+generate_ffi $basename_underscore
+create_fat_simulator_lib $basename_underscore
+build_xcframework $basename_underscore
