@@ -43,6 +43,7 @@
             toolchain
 
             # Android
+            gradle_9
             jdk # For gradle(w)
             ktlint
             ktfmt
@@ -53,7 +54,7 @@
 
           # override the aapt2 that gradle uses with the nix-shipped version
           GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidComposition.androidsdk}/libexec/android-sdk/build-tools/36.0.0/aapt2";
-          ANDROID_NDK_HOME = "${androidComposition.androidsdk}/libexec/android-sdk/ndk";
+          ANDROID_NDK_HOME = "${androidComposition.androidsdk}/libexec/android-sdk/ndk-bundle";
 
           RUSTFLAGS = builtins.concatStringsSep " " [
             # Debug information is slow to generate and makes the binary larger

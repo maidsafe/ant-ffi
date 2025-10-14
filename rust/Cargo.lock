@@ -869,6 +869,7 @@ dependencies = [
  "rmp-serde",
  "self_encryption 0.34.2",
  "thiserror 1.0.69",
+ "tokio",
  "uniffi 0.28.2",
  "uniffi 0.29.4",
 ]
@@ -1262,6 +1263,19 @@ dependencies = [
  "event-listener-strategy",
  "futures-core",
  "pin-project-lite",
+]
+
+[[package]]
+name = "async-compat"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1ba85bc55464dcbf728b56d97e119d673f4cf9062be330a9a26f3acf504a590"
+dependencies = [
+ "futures-core",
+ "futures-io",
+ "once_cell",
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]
@@ -6694,6 +6708,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61049e4db6212d0ede80982adf0e1d6fa224e6118387324c5cfbe3083dfb2252"
 dependencies = [
  "anyhow",
+ "async-compat",
  "bytes",
  "log",
  "once_cell",

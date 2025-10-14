@@ -12,7 +12,8 @@ bytes = "1.0.1"
 rmp-serde = "1.1.1"
 self_encryption = "0.34.0"
 thiserror = "1.0"
-uniffi.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread"] }
+uniffi = { workspace = true, features = ["tokio"] }
 
 [build-dependencies]
 uniffi = { version = "0.29.4", features = [ "build" ] }
