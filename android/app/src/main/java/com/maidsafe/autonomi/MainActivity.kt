@@ -11,19 +11,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.maidsafe.autonomi.ui.theme.AutonomiTheme
-import com.maidsafe.core.SafeCalculator
+import uniffi.ant_ffi.*
 
 class MainActivity : ComponentActivity() {
-  private val calculator = SafeCalculator()
-
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+
+    // Demo encryption/decryption
+    val originalText = "Hello, Autonomi!"
+    val encrypted = encrypt(originalText.toByteArray())
+    val decrypted = decrypt(encrypted)
+    val result = String(decrypted)
 
     setContent {
       AutonomiTheme {
         // A surface container using the 'background' color from the theme
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-          Greeting("🦀says 1 + 1 = ${calculator.add(1,1)}")
+          Greeting("🦀 encrypted and decrypted: $result")
         }
       }
     }
