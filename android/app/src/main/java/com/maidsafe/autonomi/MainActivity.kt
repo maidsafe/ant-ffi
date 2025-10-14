@@ -10,8 +10,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.maidsafe.core.SafeCalculator
 import com.maidsafe.autonomi.ui.theme.AutonomiTheme
+import com.maidsafe.core.SafeCalculator
 
 class MainActivity : ComponentActivity() {
   private val calculator = SafeCalculator()

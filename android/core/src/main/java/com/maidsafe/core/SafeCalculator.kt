@@ -1,8 +1,8 @@
 package com.maidsafe.core
 
-import uniffi.autonomi.Calculator
-import uniffi.autonomi.ComputationResult
-import uniffi.autonomi.safeAdditionOperator
+import uniffi.ant_ffi.Calculator
+import uniffi.ant_ffi.ComputationResult
+import uniffi.ant_ffi.safeAdditionOperator
 
 class SafeCalculator {
   // Functional core; imperative shell. This is purely internal state with an imperative API
