@@ -19,6 +19,7 @@ let package = Package(
     name: "Autonomi",
     platforms: [
         .iOS(.v16),
+        .macOS(.v10_15),
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
@@ -37,7 +38,13 @@ let package = Package(
         .target(
             name: "UniFFI",
             dependencies: [.target(name: "AutonomiCoreRS")],
-            path: "apple/Sources/UniFFI"
+            path: "apple/Sources/UniFFI",
+            linkerSettings: [
+                .linkedFramework("SystemConfiguration"),
+                .linkedFramework("Security"),
+                .linkedFramework("CoreFoundation"),
+                .linkedLibrary("resolv")
+            ]
         ),
         .testTarget(
             name: "AutonomiTests",

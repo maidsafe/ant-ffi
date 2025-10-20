@@ -29,6 +29,7 @@ done
 # * Only build one simulator arch for local development (we build both since many still use Intel Macs)
 # * Option to do debug builds instead for local development
 fat_simulator_lib_dir="target/ios-simulator-fat/release"
+fat_macos_lib_dir="target/macos-fat/release"
 
 generate_ffi() {
   echo "Generating framework module mapping and FFI bindings"
@@ -45,6 +46,12 @@ create_fat_simulator_lib() {
   lipo -create target/x86_64-apple-ios/release/lib$1.a target/aarch64-apple-ios-sim/release/lib$1.a -output $fat_simulator_lib_dir/lib$1.a
 }
 
+create_fat_macos_lib() {
+  echo "Creating a fat library for x86_64 and aarch64 macOS"
+  mkdir -p $fat_macos_lib_dir
+  lipo -create target/x86_64-apple-darwin/release/lib$1.a target/aarch64-apple-darwin/release/lib$1.a -output $fat_macos_lib_dir/lib$1.a
+}
+
 build_xcframework() {
   # Builds an XCFramework
   echo "Generating XCFramework"
@@ -52,6 +59,7 @@ build_xcframework() {
   xcodebuild -create-xcframework \
     -library target/aarch64-apple-ios/release/lib$1.a -headers target/uniffi-xcframework-staging \
     -library target/ios-simulator-fat/release/lib$1.a -headers target/uniffi-xcframework-staging \
+    -library target/macos-fat/release/lib$1.a -headers target/uniffi-xcframework-staging \
     -output target/ios/lib$1-rs.xcframework
 
   if $release; then
@@ -67,10 +75,17 @@ build_xcframework() {
 basename=ant-ffi
 basename_underscore=ant_ffi
 
+# Set deployment targets to match Package.swift requirements
+export IPHONEOS_DEPLOYMENT_TARGET=16.0
+export MACOSX_DEPLOYMENT_TARGET=10.15
+
 cargo build -p $basename --lib --release --target x86_64-apple-ios
 cargo build -p $basename --lib --release --target aarch64-apple-ios-sim
 cargo build -p $basename --lib --release --target aarch64-apple-ios
+cargo build -p $basename --lib --release --target x86_64-apple-darwin
+cargo build -p $basename --lib --release --target aarch64-apple-darwin
 
 generate_ffi $basename_underscore
 create_fat_simulator_lib $basename_underscore
+create_fat_macos_lib $basename_underscore
 build_xcframework $basename_underscore
