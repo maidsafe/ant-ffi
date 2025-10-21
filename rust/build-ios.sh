@@ -97,6 +97,14 @@ else
   echo "Building simulator target only (fast mode)..."
   cargo build -p $basename --lib --release --target aarch64-apple-ios-sim
   generate_ffi $basename_underscore "target/aarch64-apple-ios-sim/release/lib$basename_underscore.a"
-  echo "Done! Swift bindings generated in ../apple/Sources/UniFFI/"
-  echo "For full XCFramework build, use: ./build-ios.sh --full"
+
+  # Create a simulator-only XCFramework for local development and CI
+  echo "Creating simulator-only XCFramework..."
+  rm -rf target/ios
+  xcodebuild -create-xcframework \
+    -library target/aarch64-apple-ios-sim/release/lib$basename_underscore.a -headers target/uniffi-xcframework-staging \
+    -output target/ios/lib$basename_underscore-rs.xcframework
+
+  echo "Done! Swift bindings and XCFramework generated."
+  echo "For full multi-platform XCFramework build, use: ./build-ios.sh --full"
 fi
