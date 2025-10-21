@@ -6,35 +6,37 @@ set -u
 # NOTE: You MUST run this every time you make changes to the core. Unfortunately, calling this from Xcode directly
 # does not work so well.
 
-# In release mode, we create a ZIP archive of the xcframework and update Package.swift with the computed checksum.
-# This is only needed when cutting a new release, not for local development.
+# Build modes:
+# - Default (no flags): Build only aarch64-apple-ios-sim for fast local development and CI
+# - --full: Build all targets and create XCFramework (needed for releases)
+# - --release: When used with --full, creates ZIP archive and updates Package.swift checksum
+full=false
 release=false
 
 for arg in "$@"
 do
     case $arg in
+        --full)
+            full=true
+            shift
+            ;;
         --release)
             release=true
-            shift # Remove --release from processing
+            shift
             ;;
         *)
-            shift # Ignore other argument from processing
+            shift
             ;;
     esac
 done
-
-
-# Potential optimizations for the future:
-#
-# * Only build one simulator arch for local development (we build both since many still use Intel Macs)
-# * Option to do debug builds instead for local development
 fat_simulator_lib_dir="target/ios-simulator-fat/release"
 fat_macos_lib_dir="target/macos-fat/release"
 
 generate_ffi() {
-  echo "Generating framework module mapping and FFI bindings"
+  local target_lib="$2"
+  echo "Generating framework module mapping and FFI bindings from $target_lib"
   # NOTE: Convention requires the modulemap be named module.modulemap
-  cargo run -p uniffi-bindgen-swift -- target/aarch64-apple-ios/release/lib$1.a target/uniffi-xcframework-staging --swift-sources --headers --modulemap --module-name $1FFI --modulemap-filename module.modulemap
+  cargo run -p uniffi-bindgen-swift -- $target_lib target/uniffi-xcframework-staging --swift-sources --headers --modulemap --module-name $1FFI --modulemap-filename module.modulemap
   mkdir -p ../apple/Sources/UniFFI/
   mv target/uniffi-xcframework-staging/*.swift ../apple/Sources/UniFFI/
   mv target/uniffi-xcframework-staging/module.modulemap target/uniffi-xcframework-staging/module.modulemap
@@ -79,13 +81,22 @@ basename_underscore=ant_ffi
 export IPHONEOS_DEPLOYMENT_TARGET=16.0
 export MACOSX_DEPLOYMENT_TARGET=10.15
 
-cargo build -p $basename --lib --release --target x86_64-apple-ios
-cargo build -p $basename --lib --release --target aarch64-apple-ios-sim
-cargo build -p $basename --lib --release --target aarch64-apple-ios
-cargo build -p $basename --lib --release --target x86_64-apple-darwin
-cargo build -p $basename --lib --release --target aarch64-apple-darwin
+if $full; then
+  echo "Building all targets for full XCFramework..."
+  cargo build -p $basename --lib --release --target x86_64-apple-ios
+  cargo build -p $basename --lib --release --target aarch64-apple-ios-sim
+  cargo build -p $basename --lib --release --target aarch64-apple-ios
+  cargo build -p $basename --lib --release --target x86_64-apple-darwin
+  cargo build -p $basename --lib --release --target aarch64-apple-darwin
 
-generate_ffi $basename_underscore
-create_fat_simulator_lib $basename_underscore
-create_fat_macos_lib $basename_underscore
-build_xcframework $basename_underscore
+  generate_ffi $basename_underscore "target/aarch64-apple-ios/release/lib$basename_underscore.a"
+  create_fat_simulator_lib $basename_underscore
+  create_fat_macos_lib $basename_underscore
+  build_xcframework $basename_underscore
+else
+  echo "Building simulator target only (fast mode)..."
+  cargo build -p $basename --lib --release --target aarch64-apple-ios-sim
+  generate_ffi $basename_underscore "target/aarch64-apple-ios-sim/release/lib$basename_underscore.a"
+  echo "Done! Swift bindings generated in ../apple/Sources/UniFFI/"
+  echo "For full XCFramework build, use: ./build-ios.sh --full"
+fi
