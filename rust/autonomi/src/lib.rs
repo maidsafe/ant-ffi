@@ -3,10 +3,14 @@ use bytes::Bytes;
 use std::sync::Arc;
 
 mod data;
+mod keys;
+mod pointer;
 mod self_encryption;
 
 // Re-export data types
 pub use data::{Chunk, ChunkAddress, DataAddress, DataMapChunk, DataError};
+pub use keys::{KeyError, PublicKey, SecretKey};
+pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
 
 uniffi::setup_scaffolding!();
 
@@ -35,6 +39,15 @@ pub struct DataPutResult {
     pub cost: String,
     /// The data map chunk containing metadata to retrieve the data
     pub data_map: Arc<DataMapChunk>,
+}
+
+/// Result of creating a pointer on the network
+#[derive(uniffi::Record)]
+pub struct PointerCreateResult {
+    /// The cost paid for creating the pointer in tokens
+    pub cost: String,
+    /// The address where the pointer was stored
+    pub address: Arc<PointerAddress>,
 }
 
 /// Error type for Autonomi Client operations
@@ -341,4 +354,130 @@ impl Client {
 
         Ok(cost.to_string())
     }
+
+    /// Get a pointer from the network by its address
+    pub async fn pointer_get(
+        &self,
+        addr: Arc<PointerAddress>,
+    ) -> Result<Arc<NetworkPointer>, ClientError> {
+        let pointer = self
+            .inner
+            .pointer_get(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(NetworkPointer { inner: pointer }))
+    }
+
+    /// Store a pointer on the network
+    /// Returns the address where the pointer was stored
+    pub async fn pointer_put(
+        &self,
+        pointer: Arc<NetworkPointer>,
+        payment: PaymentOption,
+    ) -> Result<Arc<PointerAddress>, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (_cost, addr) = self
+            .inner
+            .pointer_put(pointer.inner.clone(), autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(PointerAddress { inner: addr }))
+    }
+
+    /// Create a new pointer on the network
+    /// Make sure the owner key is not already used for another pointer
+    pub async fn pointer_create(
+        &self,
+        owner: Arc<SecretKey>,
+        target: Arc<PointerTarget>,
+        payment: PaymentOption,
+    ) -> Result<PointerCreateResult, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .pointer_create(&owner.inner, target.inner.clone(), autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(PointerCreateResult {
+            cost: cost.to_string(),
+            address: Arc::new(PointerAddress { inner: addr }),
+        })
+    }
+
+    /// Update an existing pointer to point to a new target
+    /// This operation is free as the pointer was already paid for
+    /// Only the latest version is kept, previous versions are overwritten
+    pub async fn pointer_update(
+        &self,
+        owner: Arc<SecretKey>,
+        target: Arc<PointerTarget>,
+    ) -> Result<(), ClientError> {
+        self.inner
+            .pointer_update(&owner.inner, target.inner.clone())
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    /// Update a pointer from a specific current pointer
+    /// Returns the new updated pointer
+    pub async fn pointer_update_from(
+        &self,
+        current: Arc<NetworkPointer>,
+        owner: Arc<SecretKey>,
+        target: Arc<PointerTarget>,
+    ) -> Result<Arc<NetworkPointer>, ClientError> {
+        let new_pointer = self
+            .inner
+            .pointer_update_from(&current.inner, &owner.inner, target.inner.clone())
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(NetworkPointer { inner: new_pointer }))
+    }
+
+    /// Get the cost of storing a pointer for a given public key
+    pub async fn pointer_cost(&self, key: Arc<PublicKey>) -> Result<String, ClientError> {
+        let cost = self
+            .inner
+            .pointer_cost(&key.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+}
+
+/// Verify a pointer's signature
+#[uniffi::export]
+pub fn pointer_verify(pointer: Arc<NetworkPointer>) -> Result<(), ClientError> {
+    autonomi::Client::pointer_verify(&pointer.inner).map_err(|e| ClientError::NetworkError {
+        reason: e.to_string(),
+    })
 }
