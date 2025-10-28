@@ -36,7 +36,7 @@
       {
         # For `nix develop`:
         devShell = pkgs.mkShell
-          {
+          ({
             nativeBuildInputs = with pkgs; [
               # Fixes a broken bash shell (e.g. no autocomplete)
               bashInteractive
@@ -65,7 +65,7 @@
           # override the aapt2 that gradle uses with the nix-shipped version
           GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidComposition.androidsdk}/libexec/android-sdk/build-tools/36.0.0/aapt2";
           ANDROID_NDK_HOME = "${androidComposition.androidsdk}/libexec/android-sdk/ndk-bundle";
-        };
+        });
       }
     );
 }
