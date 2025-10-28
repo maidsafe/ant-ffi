@@ -6,7 +6,7 @@ mod data;
 mod self_encryption;
 
 // Re-export data types
-pub use data::{Chunk, ChunkAddress, DataAddress, DataMapChunk};
+pub use data::{Chunk, ChunkAddress, DataAddress, DataMapChunk, DataError};
 
 uniffi::setup_scaffolding!();
 
@@ -211,7 +211,7 @@ impl Client {
     pub async fn data_get_public(&self, address_hex: String) -> Result<Vec<u8>, ClientError> {
         // Parse the hex string into a DataAddress
         let data_address = data::DataAddress::from_hex(address_hex)
-            .map_err(|e| ClientError::InvalidAddress { reason: e })?;
+            .map_err(|e| ClientError::InvalidAddress { reason: e.to_string() })?;
 
         // Fetch the data from the network
         let bytes = self

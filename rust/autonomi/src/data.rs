@@ -5,6 +5,15 @@ use autonomi::data::{DataAddress as AutonomiDataAddress, private::DataMapChunk a
 use bytes::Bytes;
 use std::sync::Arc;
 
+/// Error type for data operations
+#[derive(Debug, uniffi::Error, thiserror::Error)]
+pub enum DataError {
+    #[error("Invalid data: {reason}")]
+    InvalidData { reason: String },
+    #[error("Parsing failed: {reason}")]
+    ParsingFailed { reason: String },
+}
+
 /// A chunk of data stored on the network.
 /// Chunks are content-addressable, meaning their address is derived from their content.
 #[derive(uniffi::Object, Clone, Debug)]
@@ -73,9 +82,11 @@ pub struct ChunkAddress {
 impl ChunkAddress {
     /// Creates a new chunk address from raw bytes (32 bytes)
     #[uniffi::constructor]
-    pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, String> {
+    pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, DataError> {
         if bytes.len() != 32 {
-            return Err(format!("XorName must be exactly 32 bytes, got {}", bytes.len()));
+            return Err(DataError::InvalidData {
+                reason: format!("XorName must be exactly 32 bytes, got {}", bytes.len()),
+            });
         }
         let mut array = [0u8; 32];
         array.copy_from_slice(&bytes);
@@ -94,9 +105,10 @@ impl ChunkAddress {
 
     /// Create a ChunkAddress from a hex string
     #[uniffi::constructor]
-    pub fn from_hex(hex: String) -> Result<Arc<Self>, String> {
-        let inner = AutonomiChunkAddress::from_hex(&hex)
-            .map_err(|e| format!("Failed to parse hex: {}", e))?;
+    pub fn from_hex(hex: String) -> Result<Arc<Self>, DataError> {
+        let inner = AutonomiChunkAddress::from_hex(&hex).map_err(|e| DataError::ParsingFailed {
+            reason: format!("Failed to parse hex: {}", e),
+        })?;
         Ok(Arc::new(Self { inner }))
     }
 
@@ -121,9 +133,11 @@ pub struct DataAddress {
 impl DataAddress {
     /// Construct a new DataAddress from raw bytes (32 bytes)
     #[uniffi::constructor]
-    pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, String> {
+    pub fn new(bytes: Vec<u8>) -> Result<Arc<Self>, DataError> {
         if bytes.len() != 32 {
-            return Err(format!("XorName must be exactly 32 bytes, got {}", bytes.len()));
+            return Err(DataError::InvalidData {
+                reason: format!("XorName must be exactly 32 bytes, got {}", bytes.len()),
+            });
         }
         let mut array = [0u8; 32];
         array.copy_from_slice(&bytes);
@@ -134,9 +148,10 @@ impl DataAddress {
 
     /// Create a DataAddress from a hex string
     #[uniffi::constructor]
-    pub fn from_hex(hex: String) -> Result<Arc<Self>, String> {
-        let inner = AutonomiDataAddress::from_hex(&hex)
-            .map_err(|e| format!("Failed to parse hex: {}", e))?;
+    pub fn from_hex(hex: String) -> Result<Arc<Self>, DataError> {
+        let inner = AutonomiDataAddress::from_hex(&hex).map_err(|e| DataError::ParsingFailed {
+            reason: format!("Failed to parse hex: {}", e),
+        })?;
         Ok(Arc::new(Self { inner }))
     }
 
@@ -162,9 +177,10 @@ pub struct DataMapChunk {
 impl DataMapChunk {
     /// Creates a DataMapChunk from a hex string representation
     #[uniffi::constructor]
-    pub fn from_hex(hex: String) -> Result<Arc<Self>, String> {
-        let inner = AutonomiDataMapChunk::from_hex(&hex)
-            .map_err(|e| format!("Failed to parse hex: {}", e))?;
+    pub fn from_hex(hex: String) -> Result<Arc<Self>, DataError> {
+        let inner = AutonomiDataMapChunk::from_hex(&hex).map_err(|e| DataError::ParsingFailed {
+            reason: format!("Failed to parse hex: {}", e),
+        })?;
         Ok(Arc::new(Self { inner }))
     }
 
