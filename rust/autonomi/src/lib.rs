@@ -5,12 +5,14 @@ use std::sync::Arc;
 mod data;
 mod keys;
 mod pointer;
+mod scratchpad;
 mod self_encryption;
 
 // Re-export data types
 pub use data::{Chunk, ChunkAddress, DataAddress, DataMapChunk, DataError};
 pub use keys::{KeyError, PublicKey, SecretKey};
 pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
+pub use scratchpad::{Scratchpad, ScratchpadAddress, ScratchpadError};
 
 uniffi::setup_scaffolding!();
 
@@ -48,6 +50,15 @@ pub struct PointerCreateResult {
     pub cost: String,
     /// The address where the pointer was stored
     pub address: Arc<PointerAddress>,
+}
+
+/// Result of creating a scratchpad on the network
+#[derive(uniffi::Record)]
+pub struct ScratchpadCreateResult {
+    /// The cost paid for creating the scratchpad in tokens
+    pub cost: String,
+    /// The address where the scratchpad was stored
+    pub address: Arc<ScratchpadAddress>,
 }
 
 /// Error type for Autonomi Client operations
@@ -472,12 +483,188 @@ impl Client {
 
         Ok(cost.to_string())
     }
+
+    /// Get a scratchpad from the network by its address
+    pub async fn scratchpad_get(
+        &self,
+        addr: Arc<ScratchpadAddress>,
+    ) -> Result<Arc<Scratchpad>, ClientError> {
+        let scratchpad = self
+            .inner
+            .scratchpad_get(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(Scratchpad { inner: scratchpad }))
+    }
+
+    /// Get a scratchpad from the network using the owner's public key
+    pub async fn scratchpad_get_from_public_key(
+        &self,
+        public_key: Arc<PublicKey>,
+    ) -> Result<Arc<Scratchpad>, ClientError> {
+        let scratchpad = self
+            .inner
+            .scratchpad_get_from_public_key(&public_key.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(Scratchpad { inner: scratchpad }))
+    }
+
+    /// Store a scratchpad on the network
+    pub async fn scratchpad_put(
+        &self,
+        scratchpad: Arc<Scratchpad>,
+        payment: PaymentOption,
+    ) -> Result<ScratchpadCreateResult, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .scratchpad_put(scratchpad.inner.clone(), autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(ScratchpadCreateResult {
+            cost: cost.to_string(),
+            address: Arc::new(ScratchpadAddress { inner: addr }),
+        })
+    }
+
+    /// Create a new scratchpad on the network
+    /// The data is encrypted with the owner's key
+    /// Make sure the owner key is not already used for another scratchpad
+    pub async fn scratchpad_create(
+        &self,
+        owner: Arc<SecretKey>,
+        content_type: u64,
+        initial_data: Vec<u8>,
+        payment: PaymentOption,
+    ) -> Result<ScratchpadCreateResult, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .scratchpad_create(
+                &owner.inner,
+                content_type,
+                &Bytes::from(initial_data),
+                autonomi_payment,
+            )
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(ScratchpadCreateResult {
+            cost: cost.to_string(),
+            address: Arc::new(ScratchpadAddress { inner: addr }),
+        })
+    }
+
+    /// Update an existing scratchpad
+    /// This operation is free as the scratchpad was already paid for
+    /// Only the latest version is kept, previous versions are overwritten
+    pub async fn scratchpad_update(
+        &self,
+        owner: Arc<SecretKey>,
+        content_type: u64,
+        data: Vec<u8>,
+    ) -> Result<(), ClientError> {
+        self.inner
+            .scratchpad_update(&owner.inner, content_type, &Bytes::from(data))
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    /// Update a scratchpad from a specific current scratchpad
+    /// Returns the new updated scratchpad
+    pub async fn scratchpad_update_from(
+        &self,
+        current: Arc<Scratchpad>,
+        owner: Arc<SecretKey>,
+        content_type: u64,
+        data: Vec<u8>,
+    ) -> Result<Arc<Scratchpad>, ClientError> {
+        let new_scratchpad = self
+            .inner
+            .scratchpad_update_from(
+                &current.inner,
+                &owner.inner,
+                content_type,
+                &Bytes::from(data),
+            )
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(Scratchpad {
+            inner: new_scratchpad,
+        }))
+    }
+
+    /// Update an existing scratchpad without fetching it first
+    /// This is useful when you already have the scratchpad
+    pub async fn scratchpad_put_update(
+        &self,
+        scratchpad: Arc<Scratchpad>,
+    ) -> Result<(), ClientError> {
+        self.inner
+            .scratchpad_put_update(scratchpad.inner.clone())
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    /// Get the cost of creating a scratchpad for a given public key
+    pub async fn scratchpad_cost(&self, public_key: Arc<PublicKey>) -> Result<String, ClientError> {
+        let cost = self
+            .inner
+            .scratchpad_cost(&public_key.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
 }
 
 /// Verify a pointer's signature
 #[uniffi::export]
 pub fn pointer_verify(pointer: Arc<NetworkPointer>) -> Result<(), ClientError> {
     autonomi::Client::pointer_verify(&pointer.inner).map_err(|e| ClientError::NetworkError {
+        reason: e.to_string(),
+    })
+}
+
+/// Verify a scratchpad's signature
+#[uniffi::export]
+pub fn scratchpad_verify(scratchpad: Arc<Scratchpad>) -> Result<(), ClientError> {
+    autonomi::Client::scratchpad_verify(&scratchpad.inner).map_err(|e| ClientError::NetworkError {
         reason: e.to_string(),
     })
 }

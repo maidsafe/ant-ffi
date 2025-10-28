@@ -867,6 +867,7 @@ dependencies = [
  "autonomi",
  "blsttc",
  "bytes",
+ "hex",
  "rmp-serde",
  "self_encryption 0.34.2",
  "thiserror 1.0.69",
