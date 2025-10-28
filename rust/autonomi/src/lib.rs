@@ -1,9 +1,12 @@
 use autonomi::client::payment::PaymentOption as AutonomiPaymentOption;
-use autonomi::data::DataAddress;
 use bytes::Bytes;
 use std::sync::Arc;
 
+mod data;
 mod self_encryption;
+
+// Re-export data types
+pub use data::{Chunk, ChunkAddress, DataAddress, DataMapChunk};
 
 uniffi::setup_scaffolding!();
 
@@ -14,6 +17,24 @@ pub struct UploadResult {
     pub price: String,
     /// The hex-encoded data address where the data was stored
     pub address: String,
+}
+
+/// Result of uploading a chunk to the network
+#[derive(uniffi::Record)]
+pub struct ChunkPutResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The address where the chunk was stored
+    pub address: Arc<ChunkAddress>,
+}
+
+/// Result of uploading private data to the network
+#[derive(uniffi::Record)]
+pub struct DataPutResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The data map chunk containing metadata to retrieve the data
+    pub data_map: Arc<DataMapChunk>,
 }
 
 /// Error type for Autonomi Client operations
@@ -189,21 +210,135 @@ impl Client {
     /// Fetch public data from the network using a hex-encoded data address
     pub async fn data_get_public(&self, address_hex: String) -> Result<Vec<u8>, ClientError> {
         // Parse the hex string into a DataAddress
-        let data_address = DataAddress::from_hex(&address_hex).map_err(|e| {
-            ClientError::InvalidAddress {
-                reason: e.to_string(),
-            }
-        })?;
+        let data_address = data::DataAddress::from_hex(address_hex)
+            .map_err(|e| ClientError::InvalidAddress { reason: e })?;
 
         // Fetch the data from the network
         let bytes = self
             .inner
-            .data_get_public(&data_address)
+            .data_get_public(&data_address.inner)
             .await
             .map_err(|e| ClientError::NetworkError {
                 reason: e.to_string(),
             })?;
 
         Ok(bytes.to_vec())
+    }
+
+    /// Manually upload a chunk to the network.
+    /// It is recommended to use `data_put` for larger data as it handles encryption and chunking.
+    pub async fn chunk_put(
+        &self,
+        data: Vec<u8>,
+        payment: PaymentOption,
+    ) -> Result<ChunkPutResult, ClientError> {
+        let chunk = autonomi::Chunk::new(Bytes::from(data));
+
+        // Convert payment option
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        // Upload the chunk
+        let (cost, addr) = self
+            .inner
+            .chunk_put(&chunk, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(ChunkPutResult {
+            cost: cost.to_string(),
+            address: Arc::new(ChunkAddress { inner: addr }),
+        })
+    }
+
+    /// Get a chunk from the network by its address
+    pub async fn chunk_get(&self, addr: Arc<ChunkAddress>) -> Result<Vec<u8>, ClientError> {
+        let chunk = self
+            .inner
+            .chunk_get(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(chunk.value.to_vec())
+    }
+
+    /// Get the cost to store a chunk at a specific address
+    pub async fn chunk_cost(&self, addr: Arc<ChunkAddress>) -> Result<String, ClientError> {
+        let cost = self
+            .inner
+            .chunk_cost(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Upload private data to the network with self-encryption.
+    /// The data is encrypted and split into chunks automatically.
+    /// The DataMapChunk contains the metadata needed to retrieve and decrypt the data.
+    pub async fn data_put(
+        &self,
+        data: Vec<u8>,
+        payment: PaymentOption,
+    ) -> Result<DataPutResult, ClientError> {
+        let bytes = Bytes::from(data);
+
+        // Convert payment option
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        // Upload the data
+        let (cost, data_map) = self
+            .inner
+            .data_put(bytes, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(DataPutResult {
+            cost: cost.to_string(),
+            data_map: Arc::new(DataMapChunk { inner: data_map }),
+        })
+    }
+
+    /// Fetch private data from the network using a DataMapChunk.
+    /// The data is automatically decrypted and reassembled from chunks.
+    pub async fn data_get(&self, data_map: Arc<DataMapChunk>) -> Result<Vec<u8>, ClientError> {
+        let bytes = self
+            .inner
+            .data_get(&data_map.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(bytes.to_vec())
+    }
+
+    /// Get the estimated cost of storing private data
+    pub async fn data_cost(&self, data: Vec<u8>) -> Result<String, ClientError> {
+        let bytes = Bytes::from(data);
+        let cost = self
+            .inner
+            .data_cost(bytes)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
     }
 }
