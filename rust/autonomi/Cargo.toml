@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
-autonomi = { package = "autonomi", version = "0.6.1" }
+autonomi = { package = "autonomi", version = "0.6.3" }
 blsttc = "8"
 bytes = "1.0.1"
 hex = "0.4"
