@@ -43,6 +43,10 @@ dependencies {
     //noinspection UseTomlInstead
     implementation 'net.java.dev.jna:jna:5.15.0@aar'
 
+    // For JVM unit tests, we need the full JNA JAR (not AAR) which includes native libraries
+    //noinspection UseTomlInstead
+    testImplementation 'net.java.dev.jna:jna:5.15.0'
+
     testImplementation libs.junit
 
     androidTestImplementation libs.androidx.test.junit
@@ -53,6 +57,57 @@ cargoNdk {
     module  = "../rust"  // Directory containing Cargo.toml
     librariesNames = ["libant_ffi.so"]
     extraCargoBuildArguments = ["-p", "ant-ffi"]
+}
+
+// Build Rust library for host platform (for JVM unit tests)
+tasks.register('buildCargoHost', Exec) {
+    workingDir '../../rust'
+    commandLine 'cargo', 'build', '-p', 'ant-ffi'
+
+    doLast {
+        def hostLibDir = layout.buildDirectory.dir("rustJniLibs/desktop").get().asFile
+        hostLibDir.mkdirs()
+
+        // Copy the built library to the test resources
+        def sourceLib = file("../../rust/target/debug/libant_ffi.so")
+        def destLib = new File(hostLibDir, "libant_ffi.so")
+
+        if (sourceLib.exists()) {
+            copy {
+                from sourceLib
+                into hostLibDir
+            }
+        }
+    }
+}
+
+// Generate UniFFI bindings for unit tests
+tasks.register('generateTestUniFFIBindings', Exec) {
+    workingDir '../../rust'
+    def bDir = layout.buildDirectory.dir("generated/source/uniffi/test/java").get()
+    commandLine 'cargo', 'run', '-p', 'uniffi-bindgen', 'generate', '--library', '../rust/target/debug/libant_ffi.so', '--language', 'kotlin', '--out-dir', bDir
+
+    dependsOn 'buildCargoHost'
+
+    doFirst {
+        bDir.asFile.mkdirs()
+    }
+}
+
+// Ensure host library is built before running tests
+tasks.withType(Test).configureEach {
+    dependsOn 'buildCargoHost', 'generateTestUniFFIBindings'
+
+    def libDir = layout.buildDirectory.dir("rustJniLibs/desktop").get().asFile.absolutePath
+
+    // Add the host library directory to both java.library.path and jna.library.path
+    systemProperty 'java.library.path', libDir
+    systemProperty 'jna.library.path', libDir
+}
+
+// Add generated bindings to test source set
+android.sourceSets {
+    test.java.srcDirs += layout.buildDirectory.dir("generated/source/uniffi/test/java")
 }
 
 android.libraryVariants.all { variant ->
