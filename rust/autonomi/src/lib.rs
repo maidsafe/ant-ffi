@@ -3,6 +3,7 @@ use bytes::Bytes;
 use std::sync::Arc;
 
 mod data;
+mod graph_entry;
 mod keys;
 mod pointer;
 mod scratchpad;
@@ -10,6 +11,7 @@ mod self_encryption;
 
 // Re-export data types
 pub use data::{Chunk, ChunkAddress, DataAddress, DataMapChunk, DataError};
+pub use graph_entry::{GraphDescendant, GraphEntry, GraphEntryAddress, GraphEntryError};
 pub use keys::{KeyError, PublicKey, SecretKey};
 pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
 pub use scratchpad::{Scratchpad, ScratchpadAddress, ScratchpadError};
@@ -59,6 +61,15 @@ pub struct ScratchpadCreateResult {
     pub cost: String,
     /// The address where the scratchpad was stored
     pub address: Arc<ScratchpadAddress>,
+}
+
+/// Result of uploading a graph entry to the network
+#[derive(uniffi::Record)]
+pub struct GraphEntryPutResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The address where the graph entry was stored
+    pub address: Arc<GraphEntryAddress>,
 }
 
 /// Error type for Autonomi Client operations
@@ -644,6 +655,79 @@ impl Client {
         let cost = self
             .inner
             .scratchpad_cost(&public_key.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    // ===== GraphEntry Methods =====
+
+    /// Fetch a graph entry from the network
+    pub async fn graph_entry_get(
+        &self,
+        addr: Arc<GraphEntryAddress>,
+    ) -> Result<Arc<GraphEntry>, ClientError> {
+        let entry = self
+            .inner
+            .graph_entry_get(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(GraphEntry { inner: entry }))
+    }
+
+    /// Check if a graph entry exists on the network
+    pub async fn graph_entry_check_existence(
+        &self,
+        addr: Arc<GraphEntryAddress>,
+    ) -> Result<bool, ClientError> {
+        let exists = self
+            .inner
+            .graph_entry_check_existence(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(exists)
+    }
+
+    /// Put a graph entry to the network
+    pub async fn graph_entry_put(
+        &self,
+        entry: Arc<GraphEntry>,
+        payment: PaymentOption,
+    ) -> Result<GraphEntryPutResult, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .graph_entry_put(entry.inner.clone(), autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(GraphEntryPutResult {
+            cost: cost.to_string(),
+            address: Arc::new(GraphEntryAddress { inner: addr }),
+        })
+    }
+
+    /// Get the cost to create a graph entry for a given public key
+    pub async fn graph_entry_cost(&self, key: Arc<PublicKey>) -> Result<String, ClientError> {
+        let cost = self
+            .inner
+            .graph_entry_cost(&key.inner)
             .await
             .map_err(|e| ClientError::NetworkError {
                 reason: e.to_string(),
