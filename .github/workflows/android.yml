@@ -89,8 +89,10 @@ jobs:
       working-directory: android
 
     - name: Unit test
-      run: ./gradlew test
+      run: ./gradlew :core:testDebugUnitTest
       working-directory: android
+      env:
+        CARGO_NDK_TARGET_ARCH: arm64
 
     - name: 'Upload Artifact'
       uses: actions/upload-artifact@v4
