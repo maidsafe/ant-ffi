@@ -1,6 +1,6 @@
 /**
- * JVM Unit tests for Autonomi encryption/decryption functionality.
- * These tests run on the host JVM without requiring an Android emulator.
+ * JVM Unit tests for Autonomi encryption/decryption functionality. These tests run on the host JVM
+ * without requiring an Android emulator.
  */
 package com.maidsafe.autonomi.core
 
