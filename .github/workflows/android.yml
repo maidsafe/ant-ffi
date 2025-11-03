@@ -25,6 +25,11 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
+    - name: Setup Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: rust
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       working-directory: android
@@ -43,6 +48,8 @@ jobs:
     - name: Build with Gradle
       run: ./gradlew build
       working-directory: android
+      env:
+        CARGO_NDK_TARGET_ARCH: arm64
 
   test:
     runs-on: ubuntu-latest
@@ -64,6 +71,11 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
         cache: gradle
+
+    - name: Setup Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: rust
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew

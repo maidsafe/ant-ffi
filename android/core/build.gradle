@@ -57,6 +57,13 @@ cargoNdk {
     module  = "../rust"  // Directory containing Cargo.toml
     librariesNames = ["libant_ffi.so"]
     extraCargoBuildArguments = ["-p", "ant-ffi"]
+
+    // Allow limiting targets via environment variable for CI
+    // e.g., CARGO_NDK_TARGET_ARCH=arm64 for single-arch builds
+    def targetArch = System.getenv("CARGO_NDK_TARGET_ARCH")
+    if (targetArch != null) {
+        targets = [targetArch]
+    }
 }
 
 // Build Rust library for host platform (for JVM unit tests)
