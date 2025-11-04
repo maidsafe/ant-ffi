@@ -36,10 +36,11 @@ impl ScratchpadAddress {
     /// Create a ScratchpadAddress from a hex string
     #[uniffi::constructor]
     pub fn from_hex(hex: String) -> Result<Arc<Self>, ScratchpadError> {
-        let inner = AutonomiScratchpadAddress::from_hex(&hex)
-            .map_err(|e| ScratchpadError::ParsingFailed {
+        let inner = AutonomiScratchpadAddress::from_hex(&hex).map_err(|e| {
+            ScratchpadError::ParsingFailed {
                 reason: format!("Failed to parse hex: {}", e),
-            })?;
+            }
+        })?;
         Ok(Arc::new(Self { inner }))
     }
 
@@ -104,12 +105,12 @@ impl Scratchpad {
 
     /// Decrypt the data using the owner's secret key
     pub fn decrypt_data(&self, sk: Arc<SecretKey>) -> Result<Vec<u8>, ScratchpadError> {
-        let data = self
-            .inner
-            .decrypt_data(&sk.inner)
-            .map_err(|e| ScratchpadError::DecryptionFailed {
-                reason: format!("Failed to decrypt: {}", e),
-            })?;
+        let data =
+            self.inner
+                .decrypt_data(&sk.inner)
+                .map_err(|e| ScratchpadError::DecryptionFailed {
+                    reason: format!("Failed to decrypt: {}", e),
+                })?;
         Ok(data.to_vec())
     }
 

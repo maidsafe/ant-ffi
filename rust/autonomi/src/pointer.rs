@@ -67,11 +67,7 @@ impl NetworkPointer {
     /// Create a new pointer signed with the provided secret key
     /// There can only be one pointer per key on the network
     #[uniffi::constructor]
-    pub fn new(
-        key: Arc<SecretKey>,
-        counter: u64,
-        target: Arc<PointerTarget>,
-    ) -> Arc<Self> {
+    pub fn new(key: Arc<SecretKey>, counter: u64, target: Arc<PointerTarget>) -> Arc<Self> {
         Arc::new(Self {
             inner: AutonomiPointer::new(&key.inner, counter, target.inner.clone()),
         })

@@ -1,7 +1,7 @@
-use autonomi::{
-    Chunk as AutonomiChunk, ChunkAddress as AutonomiChunkAddress, XorName,
+use autonomi::data::{
+    DataAddress as AutonomiDataAddress, private::DataMapChunk as AutonomiDataMapChunk,
 };
-use autonomi::data::{DataAddress as AutonomiDataAddress, private::DataMapChunk as AutonomiDataMapChunk};
+use autonomi::{Chunk as AutonomiChunk, ChunkAddress as AutonomiChunkAddress, XorName};
 use bytes::Bytes;
 use std::sync::Arc;
 

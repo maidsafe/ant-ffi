@@ -1,5 +1,7 @@
 use crate::keys::{PublicKey, SecretKey};
-use autonomi::client::graph::{GraphEntry as AutonomiGraphEntry, GraphEntryAddress as AutonomiGraphEntryAddress};
+use autonomi::client::graph::{
+    GraphEntry as AutonomiGraphEntry, GraphEntryAddress as AutonomiGraphEntryAddress,
+};
 use std::sync::Arc;
 
 /// Address of a graph entry on the network
@@ -21,10 +23,11 @@ impl GraphEntryAddress {
     /// Create a graph entry address from a hex string
     #[uniffi::constructor]
     pub fn from_hex(hex: String) -> Result<Arc<Self>, GraphEntryError> {
-        let inner = AutonomiGraphEntryAddress::from_hex(&hex)
-            .map_err(|e| GraphEntryError::ParsingFailed {
+        let inner = AutonomiGraphEntryAddress::from_hex(&hex).map_err(|e| {
+            GraphEntryError::ParsingFailed {
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
         Ok(Arc::new(Self { inner }))
     }
 

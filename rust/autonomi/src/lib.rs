@@ -10,7 +10,7 @@ mod scratchpad;
 mod self_encryption;
 
 // Re-export data types
-pub use data::{Chunk, ChunkAddress, DataAddress, DataMapChunk, DataError};
+pub use data::{Chunk, ChunkAddress, DataAddress, DataError, DataMapChunk};
 pub use graph_entry::{GraphDescendant, GraphEntry, GraphEntryAddress, GraphEntryError};
 pub use keys::{KeyError, PublicKey, SecretKey};
 pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
@@ -113,8 +113,8 @@ impl Network {
     /// * `is_local` - If true, connects to local testnet. If false, connects to production network.
     #[uniffi::constructor]
     pub fn new(is_local: bool) -> Result<Arc<Self>, NetworkError> {
-        let network = autonomi::Network::new(is_local)
-            .map_err(|e| NetworkError::CreationFailed {
+        let network =
+            autonomi::Network::new(is_local).map_err(|e| NetworkError::CreationFailed {
                 reason: e.to_string(),
             })?;
 
@@ -155,13 +155,13 @@ impl Wallet {
 
     /// Get the wallet's token balance
     pub async fn balance_of_tokens(&self) -> Result<String, WalletError> {
-        let balance = self
-            .inner
-            .balance_of_tokens()
-            .await
-            .map_err(|e| WalletError::BalanceCheckFailed {
-                reason: e.to_string(),
-            })?;
+        let balance =
+            self.inner
+                .balance_of_tokens()
+                .await
+                .map_err(|e| WalletError::BalanceCheckFailed {
+                    reason: e.to_string(),
+                })?;
 
         Ok(balance.to_string())
     }
@@ -185,11 +185,12 @@ impl Client {
     /// Initialize a new Autonomi client connected to the production network
     #[uniffi::constructor]
     pub async fn init() -> Result<Arc<Self>, ClientError> {
-        let client = autonomi::Client::init()
-            .await
-            .map_err(|e| ClientError::InitializationFailed {
-                reason: e.to_string(),
-            })?;
+        let client =
+            autonomi::Client::init()
+                .await
+                .map_err(|e| ClientError::InitializationFailed {
+                    reason: e.to_string(),
+                })?;
 
         Ok(Arc::new(Self {
             inner: Arc::new(client),
@@ -199,11 +200,11 @@ impl Client {
     /// Initialize a new Autonomi client connected to a local testnet
     #[uniffi::constructor]
     pub async fn init_local() -> Result<Arc<Self>, ClientError> {
-        let client = autonomi::Client::init_local()
-            .await
-            .map_err(|e| ClientError::InitializationFailed {
+        let client = autonomi::Client::init_local().await.map_err(|e| {
+            ClientError::InitializationFailed {
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
 
         Ok(Arc::new(Self {
             inner: Arc::new(client),
@@ -245,8 +246,10 @@ impl Client {
     /// Fetch public data from the network using a hex-encoded data address
     pub async fn data_get_public(&self, address_hex: String) -> Result<Vec<u8>, ClientError> {
         // Parse the hex string into a DataAddress
-        let data_address = data::DataAddress::from_hex(address_hex)
-            .map_err(|e| ClientError::InvalidAddress { reason: e.to_string() })?;
+        let data_address =
+            data::DataAddress::from_hex(address_hex).map_err(|e| ClientError::InvalidAddress {
+                reason: e.to_string(),
+            })?;
 
         // Fetch the data from the network
         let bytes = self
@@ -293,26 +296,26 @@ impl Client {
 
     /// Get a chunk from the network by its address
     pub async fn chunk_get(&self, addr: Arc<ChunkAddress>) -> Result<Vec<u8>, ClientError> {
-        let chunk = self
-            .inner
-            .chunk_get(&addr.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
-                reason: e.to_string(),
-            })?;
+        let chunk =
+            self.inner
+                .chunk_get(&addr.inner)
+                .await
+                .map_err(|e| ClientError::NetworkError {
+                    reason: e.to_string(),
+                })?;
 
         Ok(chunk.value.to_vec())
     }
 
     /// Get the cost to store a chunk at a specific address
     pub async fn chunk_cost(&self, addr: Arc<ChunkAddress>) -> Result<String, ClientError> {
-        let cost = self
-            .inner
-            .chunk_cost(&addr.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
-                reason: e.to_string(),
-            })?;
+        let cost =
+            self.inner
+                .chunk_cost(&addr.inner)
+                .await
+                .map_err(|e| ClientError::NetworkError {
+                    reason: e.to_string(),
+                })?;
 
         Ok(cost.to_string())
     }
@@ -352,13 +355,13 @@ impl Client {
     /// Fetch private data from the network using a DataMapChunk.
     /// The data is automatically decrypted and reassembled from chunks.
     pub async fn data_get(&self, data_map: Arc<DataMapChunk>) -> Result<Vec<u8>, ClientError> {
-        let bytes = self
-            .inner
-            .data_get(&data_map.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
-                reason: e.to_string(),
-            })?;
+        let bytes =
+            self.inner
+                .data_get(&data_map.inner)
+                .await
+                .map_err(|e| ClientError::NetworkError {
+                    reason: e.to_string(),
+                })?;
 
         Ok(bytes.to_vec())
     }
@@ -382,13 +385,13 @@ impl Client {
         &self,
         addr: Arc<PointerAddress>,
     ) -> Result<Arc<NetworkPointer>, ClientError> {
-        let pointer = self
-            .inner
-            .pointer_get(&addr.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
-                reason: e.to_string(),
-            })?;
+        let pointer =
+            self.inner
+                .pointer_get(&addr.inner)
+                .await
+                .map_err(|e| ClientError::NetworkError {
+                    reason: e.to_string(),
+                })?;
 
         Ok(Arc::new(NetworkPointer { inner: pointer }))
     }
@@ -484,13 +487,13 @@ impl Client {
 
     /// Get the cost of storing a pointer for a given public key
     pub async fn pointer_cost(&self, key: Arc<PublicKey>) -> Result<String, ClientError> {
-        let cost = self
-            .inner
-            .pointer_cost(&key.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
-                reason: e.to_string(),
-            })?;
+        let cost =
+            self.inner
+                .pointer_cost(&key.inner)
+                .await
+                .map_err(|e| ClientError::NetworkError {
+                    reason: e.to_string(),
+                })?;
 
         Ok(cost.to_string())
     }
@@ -500,13 +503,11 @@ impl Client {
         &self,
         addr: Arc<ScratchpadAddress>,
     ) -> Result<Arc<Scratchpad>, ClientError> {
-        let scratchpad = self
-            .inner
-            .scratchpad_get(&addr.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
+        let scratchpad = self.inner.scratchpad_get(&addr.inner).await.map_err(|e| {
+            ClientError::NetworkError {
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
 
         Ok(Arc::new(Scratchpad { inner: scratchpad }))
     }
@@ -670,13 +671,11 @@ impl Client {
         &self,
         addr: Arc<GraphEntryAddress>,
     ) -> Result<Arc<GraphEntry>, ClientError> {
-        let entry = self
-            .inner
-            .graph_entry_get(&addr.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
+        let entry = self.inner.graph_entry_get(&addr.inner).await.map_err(|e| {
+            ClientError::NetworkError {
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
 
         Ok(Arc::new(GraphEntry { inner: entry }))
     }
@@ -725,13 +724,11 @@ impl Client {
 
     /// Get the cost to create a graph entry for a given public key
     pub async fn graph_entry_cost(&self, key: Arc<PublicKey>) -> Result<String, ClientError> {
-        let cost = self
-            .inner
-            .graph_entry_cost(&key.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
+        let cost = self.inner.graph_entry_cost(&key.inner).await.map_err(|e| {
+            ClientError::NetworkError {
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
 
         Ok(cost.to_string())
     }
