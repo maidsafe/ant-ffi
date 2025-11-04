@@ -120,6 +120,24 @@ impl Network {
 
         Ok(Arc::new(Self { inner: network }))
     }
+
+    /// Create a custom network configuration with specific RPC URL and contract addresses
+    ///
+    /// # Arguments
+    /// * `rpc_url` - RPC URL for the EVM network (e.g., "http://10.0.2.2:61611")
+    /// * `payment_token_address` - Payment token contract address (hex string)
+    /// * `data_payments_address` - Data payments contract address (hex string)
+    #[uniffi::constructor]
+    pub fn custom(
+        rpc_url: String,
+        payment_token_address: String,
+        data_payments_address: String,
+    ) -> Arc<Self> {
+        let network =
+            autonomi::Network::new_custom(&rpc_url, &payment_token_address, &data_payments_address);
+
+        Arc::new(Self { inner: network })
+    }
 }
 
 /// Wallet for paying for operations on the Autonomi network
@@ -205,6 +223,69 @@ impl Client {
                 reason: e.to_string(),
             }
         })?;
+
+        Ok(Arc::new(Self {
+            inner: Arc::new(client),
+        }))
+    }
+
+    /// Initialize a new Autonomi client with specific peer multiaddresses
+    ///
+    /// # Arguments
+    /// * `peers` - List of peer multiaddresses to connect to (e.g., "/ip4/10.0.2.2/tcp/12000")
+    /// * `evm_network` - EVM network configuration to use for payments (must match the wallet's network)
+    /// * `data_dir` - Optional directory path for storing client data. On Android, use the app's cache directory.
+    ///
+    /// If any of the provided peers is a global address, the client will not be local.
+    #[uniffi::constructor]
+    pub async fn init_with_peers(
+        peers: Vec<String>,
+        evm_network: Arc<Network>,
+        data_dir: Option<String>,
+    ) -> Result<Arc<Self>, ClientError> {
+        use std::str::FromStr;
+
+        if let Some(dir) = data_dir {
+            unsafe {
+                std::env::set_var("HOME", &dir);
+                std::env::set_var("TMPDIR", &dir);
+            }
+        }
+
+        let multiaddrs: Vec<_> = peers
+            .iter()
+            .filter_map(|p| autonomi::Multiaddr::from_str(p).ok())
+            .collect();
+
+        if multiaddrs.is_empty() {
+            return Err(ClientError::InitializationFailed {
+                reason: "No valid peer addresses provided".to_string(),
+            });
+        }
+
+        let local = !multiaddrs.iter().any(|addr| {
+            addr.iter().any(|component| {
+                use libp2p::multiaddr::Protocol;
+                matches!(component, Protocol::Ip4(ip) if !ip.is_private() && !ip.is_loopback())
+            })
+        });
+
+        let config = autonomi::ClientConfig {
+            bootstrap_config: autonomi::BootstrapConfig {
+                local,
+                initial_peers: multiaddrs,
+                ..Default::default()
+            },
+            evm_network: evm_network.inner.clone(),
+            strategy: Default::default(),
+            network_id: None,
+        };
+
+        let client = autonomi::Client::init_with_config(config)
+            .await
+            .map_err(|e| ClientError::InitializationFailed {
+                reason: e.to_string(),
+            })?;
 
         Ok(Arc::new(Self {
             inner: Arc::new(client),

@@ -805,15 +805,16 @@ dependencies = [
 
 [[package]]
 name = "ant-bootstrap"
-version = "0.2.8"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a963b19fe0486aa507d5086ff77dbe8f80be2c24d2411263c4f7da780ce57d1"
+checksum = "e9fcc8926994650f50066d591ee60f6a19486189b7d92e7528180cb23b23bdce"
 dependencies = [
  "ant-logging",
  "ant-protocol",
  "atomic-write-file",
  "chrono",
  "clap",
+ "custom_debug",
  "dirs-next",
  "futures",
  "libp2p",
@@ -868,6 +869,7 @@ dependencies = [
  "blsttc",
  "bytes",
  "hex",
+ "libp2p",
  "rmp-serde",
  "self_encryption 0.34.2",
  "thiserror 1.0.69",
@@ -1391,9 +1393,9 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
 name = "autonomi"
-version = "0.6.1"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "788c294c4bec41d8e436c3a91ee5b4181243d7b33ed53aec483f3f65edf7d759"
+checksum = "4097e084c85e7ee5145bbfc968b1118b313a50d4fb9fe12b2dd9ea9b3b5688ad"
 dependencies = [
  "ant-bootstrap",
  "ant-evm",
@@ -2548,7 +2550,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2574,9 +2576,9 @@ dependencies = [
 
 [[package]]
 name = "evmlib"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "165fa357f47d5290b3d141419eb25a17110a2c9fa1863f6947041a9221b96ff9"
+checksum = "19c3b7976496b986a46cd38235968b60fa025b869e53d7d85db0693e606703b2"
 dependencies = [
  "alloy",
  "rand 0.8.5",
@@ -4451,7 +4453,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5041,7 +5043,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.1",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5467,7 +5469,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.11.0",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6119,7 +6121,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix 1.1.2",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7165,7 +7167,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
