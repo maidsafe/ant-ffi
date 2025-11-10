@@ -98,25 +98,25 @@ fun NetworkStorageDemo() {
                               statusMessage = ""
                               connectionStatus = "Connecting..."
                               try {
-                                val network = Network.custom(
-                                    rpcUrl = "http://10.0.2.2:61611",
-                                    paymentTokenAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-                                    dataPaymentsAddress = "0x8464135c8F25Da09e49BC8782676a84730C318bC"
-                                )
+                                val network =
+                                    Network.custom(
+                                        rpcUrl = "http://10.0.2.2:61611",
+                                        paymentTokenAddress =
+                                            "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+                                        dataPaymentsAddress =
+                                            "0x8464135c8F25Da09e49BC8782676a84730C318bC")
 
                                 val startTime = System.currentTimeMillis()
-                                client = Client.initWithPeers(
-                                    listOf(peerAddress),
-                                    network,
-                                    context.cacheDir.absolutePath
-                                )
+                                client =
+                                    Client.initWithPeers(
+                                        listOf(peerAddress), network, context.cacheDir.absolutePath)
                                 val elapsed = System.currentTimeMillis() - startTime
                                 connectionStatus = "Connected (${elapsed}ms)"
 
-                                wallet = Wallet.newFromPrivateKey(
-                                    network,
-                                    "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-                                )
+                                wallet =
+                                    Wallet.newFromPrivateKey(
+                                        network,
+                                        "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
                                 val balance = wallet!!.balanceOfTokens()
 
                                 statusMessage = "Ready! Balance: $balance tokens"
@@ -171,10 +171,9 @@ fun NetworkStorageDemo() {
                 isLoading = true
                 statusMessage = ""
                 try {
-                  val result = client!!.dataPutPublic(
-                      noteText.toByteArray(),
-                      PaymentOption.WalletPayment(wallet!!)
-                  )
+                  val result =
+                      client!!.dataPutPublic(
+                          noteText.toByteArray(), PaymentOption.WalletPayment(wallet!!))
                   uploadedAddresses = uploadedAddresses + result.address
                   statusMessage = "Uploaded! Cost: ${result.price} tokens"
                 } catch (e: Exception) {
