@@ -848,7 +848,10 @@ impl Client {
         // Convert value to fixed size array (registers store [u8; 32])
         if value.len() != 32 {
             return Err(ClientError::NetworkError {
-                reason: format!("Register value must be exactly 32 bytes, got {}", value.len()),
+                reason: format!(
+                    "Register value must be exactly 32 bytes, got {}",
+                    value.len()
+                ),
             });
         }
         let mut value_array = [0u8; 32];
@@ -888,7 +891,10 @@ impl Client {
         // Convert value to fixed size array (registers store [u8; 32])
         if value.len() != 32 {
             return Err(ClientError::NetworkError {
-                reason: format!("Register value must be exactly 32 bytes, got {}", value.len()),
+                reason: format!(
+                    "Register value must be exactly 32 bytes, got {}",
+                    value.len()
+                ),
             });
         }
         let mut value_array = [0u8; 32];
@@ -916,14 +922,15 @@ impl Client {
     /// Get the current value of a register
     ///
     /// Returns the 32-byte register value.
-    pub async fn register_get(&self, address: Arc<RegisterAddress>) -> Result<Vec<u8>, ClientError> {
-        let value = self
-            .inner
-            .register_get(&address.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
+    pub async fn register_get(
+        &self,
+        address: Arc<RegisterAddress>,
+    ) -> Result<Vec<u8>, ClientError> {
+        let value = self.inner.register_get(&address.inner).await.map_err(|e| {
+            ClientError::NetworkError {
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
 
         Ok(value.to_vec())
     }
@@ -932,13 +939,11 @@ impl Client {
     ///
     /// Returns the estimated cost as a string.
     pub async fn register_cost(&self, owner: Arc<PublicKey>) -> Result<String, ClientError> {
-        let cost = self
-            .inner
-            .register_cost(&owner.inner)
-            .await
-            .map_err(|e| ClientError::NetworkError {
+        let cost = self.inner.register_cost(&owner.inner).await.map_err(|e| {
+            ClientError::NetworkError {
                 reason: e.to_string(),
-            })?;
+            }
+        })?;
 
         Ok(cost.to_string())
     }

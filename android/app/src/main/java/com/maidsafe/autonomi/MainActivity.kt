@@ -70,6 +70,12 @@ fun NetworkStorageDemo() {
   var downloadedFileName by remember { mutableStateOf("downloaded_file") }
   var downloadedText by remember { mutableStateOf("") }
 
+  // Register state
+  var registerKey by remember { mutableStateOf<SecretKey?>(null) }
+  var registerAddress by remember { mutableStateOf("") }
+  var registerValue by remember { mutableStateOf("Hello Register! This is 32 chars") }
+  var retrievedRegisterValue by remember { mutableStateOf("") }
+
   val filePickerLauncher =
       rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         selectedFileUri = uri
@@ -501,6 +507,194 @@ fun NetworkStorageDemo() {
                         modifier = Modifier.padding(top = 8.dp),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onTertiaryContainer)
+                  }
+                }
+          }
+
+          HorizontalDivider()
+
+          // Register Section (Mutable Versioned Storage)
+          Text(text = "Registers (Mutable Storage)", style = MaterialTheme.typography.titleMedium)
+          Text(
+              text = "Registers store 32-byte values that can be updated over time",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+          // Generate Register Key
+          Button(
+              onClick = {
+                scope.launch {
+                  registerKey = SecretKey.random()
+                  val addr = RegisterAddress(registerKey!!.publicKey())
+                  registerAddress = addr.toHex()
+                  snackbarHostState.showSnackbar("Generated register key")
+                }
+              },
+              modifier = Modifier.fillMaxWidth(),
+              enabled = client != null && !isLoading) {
+                Text(if (registerKey == null) "Generate Register Key" else "Regenerate Key")
+              }
+
+          // Display Register Address
+          if (registerAddress.isNotEmpty()) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+              Column(modifier = Modifier.padding(12.dp)) {
+                Text(text = "Register Address:", style = MaterialTheme.typography.labelSmall)
+                SelectionContainer {
+                  Text(
+                      text = registerAddress,
+                      style = MaterialTheme.typography.bodySmall,
+                      fontFamily = FontFamily.Monospace,
+                      modifier = Modifier.padding(top = 4.dp))
+                }
+              }
+            }
+          }
+
+          // Register Value Input (must be 32 bytes)
+          OutlinedTextField(
+              value = registerValue,
+              onValueChange = {
+                // Ensure exactly 32 bytes/characters
+                if (it.length <= 32) {
+                  registerValue = it.padEnd(32, ' ')
+                }
+              },
+              modifier = Modifier.fillMaxWidth(),
+              label = { Text("Register Value (32 chars)") },
+              enabled = client != null && registerKey != null,
+              supportingText = { Text("${registerValue.length}/32 characters") },
+              singleLine = true)
+
+          // Register Operations
+          Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Get Cost
+                Button(
+                    onClick = {
+                      scope.launch {
+                        isLoading = true
+                        try {
+                          val cost = client!!.registerCost(registerKey!!.publicKey())
+                          snackbarHostState.showSnackbar("Register cost: $cost tokens")
+                        } catch (e: Exception) {
+                          snackbarHostState.showSnackbar("Cost check failed: ${e.message}")
+                        } finally {
+                          isLoading = false
+                        }
+                      }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = client != null && registerKey != null && !isLoading) {
+                      Text("Cost")
+                    }
+
+                // Create Register
+                Button(
+                    onClick = {
+                      scope.launch {
+                        isLoading = true
+                        try {
+                          val result =
+                              client!!.registerCreate(
+                                  registerKey!!,
+                                  registerValue.toByteArray(),
+                                  PaymentOption.WalletPayment(wallet!!))
+                          registerAddress = result.address.toHex()
+                          snackbarHostState.showSnackbar(
+                              "Created register! Cost: ${result.cost} tokens")
+                        } catch (e: Exception) {
+                          snackbarHostState.showSnackbar("Create failed: ${e.message}")
+                        } finally {
+                          isLoading = false
+                        }
+                      }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled =
+                        client != null &&
+                            wallet != null &&
+                            registerKey != null &&
+                            registerValue.length == 32 &&
+                            !isLoading) {
+                      Text("Create")
+                    }
+              }
+
+          Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Update Register
+                Button(
+                    onClick = {
+                      scope.launch {
+                        isLoading = true
+                        try {
+                          val cost =
+                              client!!.registerUpdate(
+                                  registerKey!!,
+                                  registerValue.toByteArray(),
+                                  PaymentOption.WalletPayment(wallet!!))
+                          snackbarHostState.showSnackbar("Updated register! Cost: $cost tokens")
+                        } catch (e: Exception) {
+                          snackbarHostState.showSnackbar("Update failed: ${e.message}")
+                        } finally {
+                          isLoading = false
+                        }
+                      }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled =
+                        client != null &&
+                            wallet != null &&
+                            registerKey != null &&
+                            registerValue.length == 32 &&
+                            !isLoading) {
+                      Text("Update")
+                    }
+
+                // Get Register
+                Button(
+                    onClick = {
+                      scope.launch {
+                        isLoading = true
+                        try {
+                          val addr = RegisterAddress.fromHex(registerAddress)
+                          val value = client!!.registerGet(addr)
+                          retrievedRegisterValue = String(value)
+                          snackbarHostState.showSnackbar("Retrieved: $retrievedRegisterValue")
+                        } catch (e: Exception) {
+                          snackbarHostState.showSnackbar("Get failed: ${e.message}")
+                        } finally {
+                          isLoading = false
+                        }
+                      }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = client != null && registerAddress.isNotEmpty() && !isLoading) {
+                      Text("Get")
+                    }
+              }
+
+          // Display Retrieved Register Value
+          if (retrievedRegisterValue.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                  Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Retrieved Value:",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Text(
+                        text = retrievedRegisterValue,
+                        modifier = Modifier.padding(top = 8.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer)
                   }
                 }
           }
