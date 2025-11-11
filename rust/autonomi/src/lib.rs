@@ -1,3 +1,75 @@
+//! Autonomi UniFFI Bindings - Kotlin/Swift bindings for the Autonomi network
+//!
+//! This library provides FFI bindings to the Autonomi network for use with Kotlin (Android/JVM)
+//! and Swift (iOS/macOS). The bindings are generated using UniFFI from Mozilla.
+//!
+//! ## Current Module Implementation Status
+//!
+//! ### ✅ Fully Implemented
+//! - **Data**: Chunks, public/private data storage (see `data` module for missing streaming/file APIs)
+//! - **GraphEntry**: Graph-based data structures with parent/child relationships
+//! - **Scratchpad**: Encrypted mutable data with versioning (see `scratchpad` module for minor missing APIs)
+//! - **Pointer**: Mutable pointers to chunks and other pointers (see `pointer` module for missing target variants)
+//! - **Keys**: BLS cryptographic keys (see `keys` module for missing hierarchical derivation)
+//! - **Self-encryption**: Encrypt/decrypt data
+//!
+//! ### ❌ Major Missing Features (Available in Python Bindings)
+//!
+//! #### Registers - Mutable versioned storage
+//! - `RegisterAddress` - Address for registers
+//! - `RegisterHistory` - Version history iterator
+//! - Client methods: `register_create`, `register_update`, `register_get`, `register_cost`, `register_history`
+//! - Helper methods: `register_key_from_name`, `register_value_from_bytes`
+//!
+//! #### Vaults - Encrypted user data storage
+//! - `VaultSecretKey` - Vault-specific encryption key
+//! - `UserData` - User data container with file archives
+//! - Client methods: `vault_put`, `vault_get_user_data`, `vault_put_user_data`, `vault_cost`
+//! - Method: `fetch_and_decrypt_vault` - Retrieve and decrypt vault data
+//!
+//! #### Archives - File collections with metadata
+//! - `PublicArchive` - Collection of public files
+//! - `PrivateArchive` - Collection of private files with encryption
+//! - `ArchiveAddress` - Address for public archives
+//! - `PrivateArchiveDataMap` - Datamap for private archives
+//! - `Metadata` - File metadata (size, timestamps)
+//! - Client methods: `archive_put`, `archive_get`, `archive_put_public`, `archive_get_public`, `archive_cost`
+//!
+//! #### High-level File/Directory Operations
+//! - File: `file_download`, `file_upload`, `file_cost` (public and private variants)
+//! - Directory: `dir_download`, `dir_upload`, `dir_content_upload` (public and private variants)
+//!
+//! #### Data Streaming
+//! - `DataStream` - Iterator for streaming large data
+//! - Methods: `data_stream`, `data_stream_public`
+//!
+//! #### Event System
+//! - `ClientEvent` - Event types for monitoring
+//! - `ClientEventReceiver` - Event stream receiver
+//! - Method: `enable_client_events`
+//!
+//! #### Advanced Payment & Transactions
+//! - `TransactionConfig` - Transaction settings
+//! - `MaxFeePerGas` - Gas fee configuration
+//! - `PaymentMode` - Standard vs SingleNode payment
+//! - `Receipt` - Payment receipts
+//! - `QuotingMetrics`, `StoreQuote`, `PaymentQuote` - Detailed quote information
+//!
+//! #### Network Configuration
+//! - `EVMNetwork` - Custom EVM network configuration
+//! - `BootstrapCacheConfig` - Bootstrap cache settings
+//! - `InitialPeersConfig` - Initial peers configuration
+//! - `ClientConfig` - Complete client configuration
+//! - `RetryStrategy`, `Quorum`, `Strategy`, `Backoff` - Network resilience
+//!
+//! ## Implementation Notes
+//!
+//! Each module's documentation contains detailed information about:
+//! - What APIs are currently implemented (✅)
+//! - What APIs are missing compared to Python bindings (❌)
+//!
+//! When implementing new features, always document skipped functionality in code comments.
+
 use autonomi::client::payment::PaymentOption as AutonomiPaymentOption;
 use bytes::Bytes;
 use std::sync::Arc;
@@ -6,6 +78,7 @@ mod data;
 mod graph_entry;
 mod keys;
 mod pointer;
+mod registers;
 mod scratchpad;
 mod self_encryption;
 
@@ -14,6 +87,7 @@ pub use data::{Chunk, ChunkAddress, DataAddress, DataError, DataMapChunk};
 pub use graph_entry::{GraphDescendant, GraphEntry, GraphEntryAddress, GraphEntryError};
 pub use keys::{KeyError, PublicKey, SecretKey};
 pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
+pub use registers::{RegisterAddress, RegisterError};
 pub use scratchpad::{Scratchpad, ScratchpadAddress, ScratchpadError};
 
 uniffi::setup_scaffolding!();
@@ -70,6 +144,15 @@ pub struct GraphEntryPutResult {
     pub cost: String,
     /// The address where the graph entry was stored
     pub address: Arc<GraphEntryAddress>,
+}
+
+/// Result of creating a register on the network
+#[derive(uniffi::Record)]
+pub struct RegisterCreateResult {
+    /// The cost paid for creating the register in tokens
+    pub cost: String,
+    /// The address where the register was stored
+    pub address: Arc<RegisterAddress>,
 }
 
 /// Error type for Autonomi Client operations
@@ -737,6 +820,121 @@ impl Client {
         let cost = self
             .inner
             .scratchpad_cost(&public_key.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    // ===== Register Methods =====
+    //
+    // ❌ MISSING Register APIs (Future Work):
+    // - register_history(addr) -> RegisterHistory iterator - Get version history
+    // - register_key_from_name(owner, name) -> SecretKey - Derive register key from name
+    // - register_value_from_bytes(bytes) -> [u8; 32] - Helper to create register value
+
+    /// Create a new register on the network with an initial value
+    ///
+    /// Registers are mutable versioned storage that can be updated over time.
+    /// Returns the cost and address of the created register.
+    pub async fn register_create(
+        &self,
+        owner: Arc<SecretKey>,
+        value: Vec<u8>,
+        payment: PaymentOption,
+    ) -> Result<RegisterCreateResult, ClientError> {
+        // Convert value to fixed size array (registers store [u8; 32])
+        if value.len() != 32 {
+            return Err(ClientError::NetworkError {
+                reason: format!("Register value must be exactly 32 bytes, got {}", value.len()),
+            });
+        }
+        let mut value_array = [0u8; 32];
+        value_array.copy_from_slice(&value);
+
+        // Convert payment option
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        // Create the register
+        let (cost, addr) = self
+            .inner
+            .register_create(&owner.inner, value_array, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(RegisterCreateResult {
+            cost: cost.to_string(),
+            address: Arc::new(RegisterAddress { inner: addr }),
+        })
+    }
+
+    /// Update an existing register with a new value
+    ///
+    /// Returns the cost of the update operation.
+    pub async fn register_update(
+        &self,
+        owner: Arc<SecretKey>,
+        value: Vec<u8>,
+        payment: PaymentOption,
+    ) -> Result<String, ClientError> {
+        // Convert value to fixed size array (registers store [u8; 32])
+        if value.len() != 32 {
+            return Err(ClientError::NetworkError {
+                reason: format!("Register value must be exactly 32 bytes, got {}", value.len()),
+            });
+        }
+        let mut value_array = [0u8; 32];
+        value_array.copy_from_slice(&value);
+
+        // Convert payment option
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        // Update the register
+        let cost = self
+            .inner
+            .register_update(&owner.inner, value_array, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Get the current value of a register
+    ///
+    /// Returns the 32-byte register value.
+    pub async fn register_get(&self, address: Arc<RegisterAddress>) -> Result<Vec<u8>, ClientError> {
+        let value = self
+            .inner
+            .register_get(&address.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(value.to_vec())
+    }
+
+    /// Get the cost to create a register for a specific owner
+    ///
+    /// Returns the estimated cost as a string.
+    pub async fn register_cost(&self, owner: Arc<PublicKey>) -> Result<String, ClientError> {
+        let cost = self
+            .inner
+            .register_cost(&owner.inner)
             .await
             .map_err(|e| ClientError::NetworkError {
                 reason: e.to_string(),
