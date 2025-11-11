@@ -1,3 +1,16 @@
+//! Pointer module - Mutable pointers to data on the Autonomi network
+//!
+//! ## Current Implementation
+//! - ✅ PointerAddress: Address derived from owner's public key
+//! - ✅ NetworkPointer: Versioned mutable pointer with counter
+//! - ✅ PointerTarget: Can point to Chunk or another Pointer
+//! - ✅ Client methods: pointer_create, pointer_update, pointer_update_from, pointer_get, pointer_put, pointer_cost
+//! - ✅ Static verification: pointer_verify
+//!
+//! ## Missing APIs (available in Python bindings)
+//! - ❌ PointerTarget variants: `graph_entry(addr)`, `scratchpad(addr)` - Point to GraphEntry or Scratchpad
+//! - ❌ Client method: `pointer_check_existence(addr)` - Check if pointer exists without fetching
+
 use autonomi::pointer::{
     Pointer as AutonomiPointer, PointerAddress as AutonomiPointerAddress,
     PointerTarget as AutonomiPointerTarget,

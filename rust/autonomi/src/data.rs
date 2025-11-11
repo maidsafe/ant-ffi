@@ -1,3 +1,24 @@
+//! Data module - Chunk and data operations for the Autonomi network
+//!
+//! ## Current Implementation
+//! - ✅ Chunk: Content-addressable data storage
+//! - ✅ ChunkAddress: Addressing for chunks
+//! - ✅ DataAddress: Public data addresses
+//! - ✅ DataMapChunk: Private data encryption metadata
+//! - ✅ Client methods: data_put, data_get, data_put_public, data_get_public
+//! - ✅ Client methods: chunk_put, chunk_get, chunk_cost, data_cost
+//!
+//! ## Missing APIs (available in Python bindings)
+//! - ❌ Data streaming: `data_stream(access)`, `data_stream_public(addr)` - Stream large data iteratively
+//! - ❌ File operations: `file_cost(path)`, `file_download(data_map, path)`, `file_download_public(addr, path)`
+//! - ❌ File operations: `file_content_upload(path, payment)`, `file_content_upload_public(path, payment)`
+//! - ❌ Directory operations: `dir_download(data_map, path)`, `dir_download_public(addr, path)`
+//! - ❌ Directory operations: `dir_content_upload(path, payment)`, `dir_content_upload_public(path, payment)`
+//! - ❌ Directory operations: `dir_upload(path, payment)`, `dir_upload_public(path, payment)`
+//! - ❌ Archive operations: `archive_cost(archive)`, `archive_get(data_map)`, `archive_get_public(addr)`
+//! - ❌ Archive operations: `archive_put(archive, payment)`, `archive_put_public(archive, payment)`
+//! - ❌ Archive types: `PrivateArchive`, `PublicArchive`, `ArchiveAddress`, `PrivateArchiveDataMap`, `Metadata`
+
 use autonomi::data::{
     DataAddress as AutonomiDataAddress, private::DataMapChunk as AutonomiDataMapChunk,
 };
