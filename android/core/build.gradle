@@ -4,6 +4,7 @@ plugins {
     alias libs.plugins.ktfmt
     // The magic plugin that automates the cargo integration
     alias libs.plugins.cargo.ndk
+    id 'maven-publish'
 }
 
 android {
@@ -145,4 +146,46 @@ android.libraryVariants.all { variant ->
     // to a good solution for forcing the directory to be marked as generated (short of checking in
     // project files, I suppose).
 //    idea.module.generatedSourceDirs += file("${buildDir}/generated/source/uniffi/${variant.name}/java/uniffi")
+}
+
+// Maven publishing configuration for JitPack
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+
+                groupId = 'com.github.maidsafe'
+                artifactId = 'ant-ffi'
+                version = findProperty('VERSION_NAME') ?: '0.0.0-SNAPSHOT'
+
+                pom {
+                    name = 'Autonomi Android SDK'
+                    description = 'Android bindings for the Autonomi network'
+                    url = 'https://github.com/maidsafe/ant-ffi'
+
+                    licenses {
+                        license {
+                            name = 'BSD 3-Clause License'
+                            url = 'https://opensource.org/licenses/BSD-3-Clause'
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id = 'maidsafe'
+                            name = 'MaidSafe Developers'
+                            email = 'dev@maidsafe.net'
+                        }
+                    }
+
+                    scm {
+                        connection = 'scm:git:git://github.com/maidsafe/ant-ffi.git'
+                        developerConnection = 'scm:git:ssh://github.com/maidsafe/ant-ffi.git'
+                        url = 'https://github.com/maidsafe/ant-ffi'
+                    }
+                }
+            }
+        }
+    }
 }

@@ -1,0 +1,17 @@
+jdk:
+  - openjdk17
+
+before_install:
+  # Install Rust
+  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  - source $HOME/.cargo/env
+  # Add Android targets
+  - rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+  # Install cargo-ndk
+  - cargo install cargo-ndk
+
+install:
+  - cd android && ./gradlew :core:publishToMavenLocal -PVERSION_NAME=$VERSION
+
+env:
+  - ANDROID_NDK_HOME=/opt/android/ndk/26.1.10909125

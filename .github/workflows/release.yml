@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+        working-directory: android
+
+      - name: Create local.properties
+        run: echo 'stadiaApiKey=' > local.properties
+        working-directory: android
+
+      # NOTE: No CARGO_NDK_TARGET_ARCH env var = builds ALL architectures
+      - name: Build Release AAR (all architectures)
+        working-directory: android
+        run: ./gradlew :core:assembleRelease -PVERSION_NAME=${{ steps.version.outputs.VERSION }}
+
+      - name: Rename AAR with version
+        run: mv android/core/build/outputs/aar/core-release.aar android/core/build/outputs/aar/autonomi-core-${{ steps.version.outputs.VERSION }}.aar
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            android/core/build/outputs/aar/autonomi-core-${{ steps.version.outputs.VERSION }}.aar
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
