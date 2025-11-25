@@ -12,20 +12,10 @@
 //! - **Pointer**: Mutable pointers to chunks and other pointers (see `pointer` module for missing target variants)
 //! - **Keys**: BLS cryptographic keys (see `keys` module for missing hierarchical derivation)
 //! - **Self-encryption**: Encrypt/decrypt data
+//! - **Registers**: Mutable versioned storage (see `registers` module for missing history iteration)
+//! - **Vaults**: Encrypted user data storage (see `vault` module for missing UserData mutation)
 //!
 //! ### ❌ Major Missing Features (Available in Python Bindings)
-//!
-//! #### Registers - Mutable versioned storage
-//! - `RegisterAddress` - Address for registers
-//! - `RegisterHistory` - Version history iterator
-//! - Client methods: `register_create`, `register_update`, `register_get`, `register_cost`, `register_history`
-//! - Helper methods: `register_key_from_name`, `register_value_from_bytes`
-//!
-//! #### Vaults - Encrypted user data storage
-//! - `VaultSecretKey` - Vault-specific encryption key
-//! - `UserData` - User data container with file archives
-//! - Client methods: `vault_put`, `vault_get_user_data`, `vault_put_user_data`, `vault_cost`
-//! - Method: `fetch_and_decrypt_vault` - Retrieve and decrypt vault data
 //!
 //! #### Archives - File collections with metadata
 //! - `PublicArchive` - Collection of public files
@@ -81,6 +71,7 @@ mod pointer;
 mod registers;
 mod scratchpad;
 mod self_encryption;
+mod vault;
 
 // Re-export data types
 pub use data::{Chunk, ChunkAddress, DataAddress, DataError, DataMapChunk};
@@ -89,6 +80,9 @@ pub use keys::{KeyError, PublicKey, SecretKey};
 pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
 pub use registers::{RegisterAddress, RegisterError};
 pub use scratchpad::{Scratchpad, ScratchpadAddress, ScratchpadError};
+pub use vault::{
+    FileArchiveEntry, PrivateFileArchiveEntry, UserData, VaultError, VaultGetResult, VaultSecretKey,
+};
 
 uniffi::setup_scaffolding!();
 
@@ -944,6 +938,135 @@ impl Client {
                 reason: e.to_string(),
             }
         })?;
+
+        Ok(cost.to_string())
+    }
+
+    // ===== Vault Methods =====
+    //
+    // ❌ MISSING Vault APIs (Future Work):
+    // - UserData mutation: add_file_archive, add_private_file_archive, remove_file_archive
+
+    /// Get the cost to create a vault with the given maximum expected size
+    ///
+    /// # Arguments
+    /// * `key` - The vault secret key
+    /// * `max_expected_size` - Maximum expected size in bytes
+    pub async fn vault_cost(
+        &self,
+        key: Arc<VaultSecretKey>,
+        max_expected_size: u64,
+    ) -> Result<String, ClientError> {
+        let cost = self
+            .inner
+            .vault_cost(&key.inner, max_expected_size)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Put data into a vault
+    ///
+    /// Dynamically expands vault capacity by paying for more space when needed.
+    /// It is recommended to use the hash of the app name or unique identifier as the content type.
+    ///
+    /// # Arguments
+    /// * `data` - The data to store
+    /// * `payment` - Payment option
+    /// * `key` - The vault secret key
+    /// * `content_type` - Application-specific content type identifier
+    ///
+    /// Returns the cost of the operation.
+    pub async fn vault_put(
+        &self,
+        data: Vec<u8>,
+        payment: PaymentOption,
+        key: Arc<VaultSecretKey>,
+        content_type: u64,
+    ) -> Result<String, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let cost = self
+            .inner
+            .vault_put(
+                Bytes::from(data),
+                autonomi_payment,
+                &key.inner,
+                content_type,
+            )
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Fetch and decrypt vault data
+    ///
+    /// Returns the decrypted data and its content type.
+    pub async fn vault_get(&self, key: Arc<VaultSecretKey>) -> Result<VaultGetResult, ClientError> {
+        let (data, content_type) =
+            self.inner
+                .vault_get(&key.inner)
+                .await
+                .map_err(|e| ClientError::NetworkError {
+                    reason: e.to_string(),
+                })?;
+
+        Ok(VaultGetResult {
+            data: data.to_vec(),
+            content_type,
+        })
+    }
+
+    /// Get user data from a vault
+    ///
+    /// Returns the UserData containing references to file archives.
+    pub async fn vault_get_user_data(
+        &self,
+        key: Arc<VaultSecretKey>,
+    ) -> Result<Arc<UserData>, ClientError> {
+        let user_data = self
+            .inner
+            .vault_get_user_data(&key.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(UserData { inner: user_data }))
+    }
+
+    /// Put user data to a vault
+    ///
+    /// Returns the cost of the operation.
+    pub async fn vault_put_user_data(
+        &self,
+        key: Arc<VaultSecretKey>,
+        payment: PaymentOption,
+        user_data: Arc<UserData>,
+    ) -> Result<String, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let cost = self
+            .inner
+            .vault_put_user_data(&key.inner, autonomi_payment, user_data.inner.clone())
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
 
         Ok(cost.to_string())
     }
