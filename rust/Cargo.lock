@@ -871,7 +871,7 @@ dependencies = [
  "hex",
  "libp2p",
  "rmp-serde",
- "self_encryption 0.34.2",
+ "self_encryption 0.34.3",
  "thiserror 1.0.69",
  "tokio",
  "uniffi 0.28.2",
@@ -1418,7 +1418,7 @@ dependencies = [
  "rayon",
  "rmp-serde",
  "self_encryption 0.30.0",
- "self_encryption 0.34.2",
+ "self_encryption 0.34.3",
  "serde",
  "sha2",
  "thiserror 1.0.69",
@@ -5665,9 +5665,9 @@ dependencies = [
 
 [[package]]
 name = "self_encryption"
-version = "0.34.2"
+version = "0.34.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b64f0a0beeb7e5e98c76a53af19519f552c1b2fcd7c781c5b839063d34e6604"
+checksum = "45480c8fa045f158ab05f445ce7d0b6dfcb6e3028d91b78013271b48daa435b2"
 dependencies = [
  "aes",
  "bincode",
