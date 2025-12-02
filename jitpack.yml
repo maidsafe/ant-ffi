@@ -15,6 +15,11 @@ before_install:
 
 install:
   - touch android/local.properties
+  # Debug: show what NDK versions are available
+  - ls -la /opt/android-sdk-linux/ndk/ || echo "No /opt/android-sdk-linux/ndk/"
+  - ls -la $ANDROID_HOME/ndk/ || echo "No ANDROID_HOME/ndk/"
+  - echo "ANDROID_HOME=$ANDROID_HOME"
+  - echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
   - cd android && ./gradlew :core:publishToMavenLocal -PVERSION_NAME=$VERSION
 
 env:
