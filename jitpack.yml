@@ -11,8 +11,5 @@ before_install:
   - cargo install cargo-ndk
 
 install:
-  - echo "sdk.dir=/opt/android-sdk-linux" > android/local.properties
+  - touch android/local.properties
   - cd android && ./gradlew :core:publishToMavenLocal -PVERSION_NAME=$VERSION
-
-env:
-  ANDROID_NDK_HOME: "/opt/android/ndk/26.1.10909125"
