@@ -9,6 +9,9 @@ before_install:
   - rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
   # Install cargo-ndk
   - cargo install cargo-ndk
+  # Install NDK
+  - yes | sdkmanager --licenses
+  - yes | sdkmanager --install "ndk;26.2.11394342"
 
 install:
   - touch android/local.properties
