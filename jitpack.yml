@@ -9,12 +9,13 @@ before_install:
   - rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
   # Install cargo-ndk
   - cargo install cargo-ndk
-  # Install NDK using cmdline-tools (compatible with Java 17)
-  - yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-  - yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;26.2.11394342"
+  # Install NDK
+  - yes | $ANDROID_HOME/tools/bin/sdkmanager --licenses
+  - yes | $ANDROID_HOME/tools/bin/sdkmanager --install "ndk;26.2.11394342"
+  # Create local.properties for Android SDK location
+  - echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
 install:
-  - touch android/local.properties
   - cd android && ./gradlew :core:publishToMavenLocal -PVERSION_NAME=$VERSION
 
 env:
