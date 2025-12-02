@@ -16,3 +16,6 @@ before_install:
 install:
   - touch android/local.properties
   - cd android && ./gradlew :core:publishToMavenLocal -PVERSION_NAME=$VERSION
+
+env:
+  ANDROID_NDK_HOME: "/opt/android-sdk-linux/ndk/26.2.11394342"
