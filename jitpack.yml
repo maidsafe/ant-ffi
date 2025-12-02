@@ -14,4 +14,4 @@ install:
   - cd android && ./gradlew :core:publishToMavenLocal -PVERSION_NAME=$VERSION
 
 env:
-  - ANDROID_NDK_HOME=/opt/android/ndk/26.1.10909125
+  ANDROID_NDK_HOME: "/opt/android/ndk/26.1.10909125"
