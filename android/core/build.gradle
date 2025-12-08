@@ -40,15 +40,11 @@ dependencies {
     implementation libs.androidx.ktx
     implementation libs.androidx.appcompat
 
-    // Essential! Note that UniFFI dictates the minimum supported version, and this may change with new releases
-    // TODO: Migrate version to TOML (doesn't work). Likely related issue: https://github.com/gradle/gradle/issues/21267
-    // Use api so it's exposed to consumers, and specify artifact type properly
+    // JNA provides native access for UniFFI bindings. Using compileOnly so consumers
+    // must explicitly add JNA AAR (Gradle doesn't propagate @aar artifact types).
+    // Consumers need: implementation("net.java.dev.jna:jna:5.15.0@aar")
     //noinspection UseTomlInstead
-    api('net.java.dev.jna:jna:5.15.0') {
-        artifact {
-            type = 'aar'
-        }
-    }
+    compileOnly 'net.java.dev.jna:jna:5.15.0@aar'
 
     // For JVM unit tests, we need the full JNA JAR (not AAR) which includes native libraries
     //noinspection UseTomlInstead
