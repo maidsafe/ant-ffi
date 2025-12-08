@@ -23,10 +23,9 @@
 
         androidComposition = pkgs.androidenv.composeAndroidPackages {
           platformVersions = [ "34" "35" "36" ];
-          buildToolsVersions = [ "34.0.0" "36.0.0" ];
+          buildToolsVersions = [ "34.0.0" "35.0.0" "36.0.0" ];
           systemImageTypes = [ "google_apis_playstore" ];
-          # abiVersions = [ "armeabi-v7a" "arm64-v8a" ];
-          abiVersions = [ "x86" "x86_64" ];
+          abiVersions = [ "armeabi-v7a" "arm64-v8a" "x86" "x86_64" ];
           includeNDK = true;
           includeExtras = [ "extras;google;auto" ];
           includeEmulator = true;
@@ -65,6 +64,7 @@
           # override the aapt2 that gradle uses with the nix-shipped version
           GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidComposition.androidsdk}/libexec/android-sdk/build-tools/36.0.0/aapt2";
           ANDROID_NDK_HOME = "${androidComposition.androidsdk}/libexec/android-sdk/ndk-bundle";
+          ANDROID_HOME = "${androidComposition.androidsdk}/libexec/android-sdk";
         });
       }
     );
