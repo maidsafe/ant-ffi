@@ -6,7 +6,7 @@
 //! ## Current Module Implementation Status
 //!
 //! ### ✅ Fully Implemented
-//! - **Data**: Chunks, public/private data storage
+//! - **Data**: Chunks, public/private data storage, streaming
 //! - **Archives**: PublicArchive, PrivateArchive, Metadata, file collections
 //! - **Files**: Upload/download files (public and private)
 //! - **Directories**: Upload/download directories with recursive handling
@@ -17,12 +17,9 @@
 //! - **Self-encryption**: Encrypt/decrypt data
 //! - **Registers**: Mutable versioned storage (see `registers` module for missing history iteration)
 //! - **Vaults**: Encrypted user data storage (see `vault` module for missing UserData mutation)
+//! - **Streaming**: DataStream for memory-efficient large data handling
 //!
 //! ### ❌ Remaining Missing Features (Available in Python Bindings)
-//!
-//! #### Data Streaming
-//! - `DataStream` - Iterator for streaming large data
-//! - Methods: `data_stream`, `data_stream_public`
 //!
 //! #### Event System
 //! - `ClientEvent` - Event types for monitoring
@@ -62,6 +59,7 @@ mod pointer;
 mod registers;
 mod scratchpad;
 mod self_encryption;
+mod streaming;
 mod vault;
 
 // Re-export data types
@@ -75,6 +73,7 @@ pub use keys::{KeyError, PublicKey, SecretKey};
 pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
 pub use registers::{RegisterAddress, RegisterError};
 pub use scratchpad::{Scratchpad, ScratchpadAddress, ScratchpadError};
+pub use streaming::DataStream;
 pub use vault::{
     FileArchiveEntry, PrivateFileArchiveEntry, UserData, VaultError, VaultGetResult, VaultSecretKey,
 };
@@ -594,6 +593,40 @@ impl Client {
             })?;
 
         Ok(cost.to_string())
+    }
+
+    /// Stream private data from the network.
+    /// Use this for large data to avoid loading everything into memory.
+    /// Returns a DataStream that can be used to read data in chunks.
+    pub async fn data_stream(
+        &self,
+        data_map: Arc<DataMapChunk>,
+    ) -> Result<Arc<DataStream>, ClientError> {
+        let stream = self.inner.data_stream(&data_map.inner).await.map_err(|e| {
+            ClientError::NetworkError {
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(streaming::DataStream::new(stream))
+    }
+
+    /// Stream public data from the network.
+    /// Use this for large data to avoid loading everything into memory.
+    /// Returns a DataStream that can be used to read data in chunks.
+    pub async fn data_stream_public(
+        &self,
+        address: Arc<DataAddress>,
+    ) -> Result<Arc<DataStream>, ClientError> {
+        let stream = self
+            .inner
+            .data_stream_public(&address.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(streaming::DataStream::new(stream))
     }
 
     /// Get a pointer from the network by its address
