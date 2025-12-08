@@ -13,7 +13,8 @@
 //! - **GraphEntry**: Graph-based data structures with parent/child relationships
 //! - **Scratchpad**: Encrypted mutable data with versioning (see `scratchpad` module for minor missing APIs)
 //! - **Pointer**: Mutable pointers to chunks and other pointers (see `pointer` module for missing target variants)
-//! - **Keys**: BLS cryptographic keys (see `keys` module for missing hierarchical derivation)
+//! - **Keys**: BLS cryptographic keys with hierarchical derivation (MainSecretKey, DerivedSecretKey)
+//! - **Signatures**: BLS signature creation and verification
 //! - **Self-encryption**: Encrypt/decrypt data
 //! - **Registers**: Mutable versioned storage (see `registers` module for missing history iteration)
 //! - **Vaults**: Encrypted user data storage (see `vault` module for missing UserData mutation)
@@ -54,6 +55,7 @@ use std::sync::Arc;
 mod archive;
 mod data;
 mod graph_entry;
+mod key_derivation;
 mod keys;
 mod pointer;
 mod registers;
@@ -69,6 +71,9 @@ pub use archive::{
 };
 pub use data::{Chunk, ChunkAddress, DataAddress, DataError, DataMapChunk};
 pub use graph_entry::{GraphDescendant, GraphEntry, GraphEntryAddress, GraphEntryError};
+pub use key_derivation::{
+    DerivationIndex, DerivedPubkey, DerivedSecretKey, MainPubkey, MainSecretKey, Signature,
+};
 pub use keys::{KeyError, PublicKey, SecretKey};
 pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
 pub use registers::{RegisterAddress, RegisterError};
