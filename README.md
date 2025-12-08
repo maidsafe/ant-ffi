@@ -20,9 +20,14 @@ Add the dependency to your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.maidsafe:ant-ffi:1.0.0")
+    implementation("com.github.maidsafe:ant-ffi:v0.0.12") {
+        exclude(group = "net.java.dev.jna", module = "jna")
+    }
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
 }
 ```
+
+> **Note:** The JNA AAR must be added explicitly because Gradle doesn't propagate artifact types through transitive dependencies.
 
 ## Quick Start
 
