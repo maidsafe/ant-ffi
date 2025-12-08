@@ -6,7 +6,10 @@
 //! ## Current Module Implementation Status
 //!
 //! ### ✅ Fully Implemented
-//! - **Data**: Chunks, public/private data storage (see `data` module for missing streaming/file APIs)
+//! - **Data**: Chunks, public/private data storage
+//! - **Archives**: PublicArchive, PrivateArchive, Metadata, file collections
+//! - **Files**: Upload/download files (public and private)
+//! - **Directories**: Upload/download directories with recursive handling
 //! - **GraphEntry**: Graph-based data structures with parent/child relationships
 //! - **Scratchpad**: Encrypted mutable data with versioning (see `scratchpad` module for minor missing APIs)
 //! - **Pointer**: Mutable pointers to chunks and other pointers (see `pointer` module for missing target variants)
@@ -15,19 +18,7 @@
 //! - **Registers**: Mutable versioned storage (see `registers` module for missing history iteration)
 //! - **Vaults**: Encrypted user data storage (see `vault` module for missing UserData mutation)
 //!
-//! ### ❌ Major Missing Features (Available in Python Bindings)
-//!
-//! #### Archives - File collections with metadata
-//! - `PublicArchive` - Collection of public files
-//! - `PrivateArchive` - Collection of private files with encryption
-//! - `ArchiveAddress` - Address for public archives
-//! - `PrivateArchiveDataMap` - Datamap for private archives
-//! - `Metadata` - File metadata (size, timestamps)
-//! - Client methods: `archive_put`, `archive_get`, `archive_put_public`, `archive_get_public`, `archive_cost`
-//!
-//! #### High-level File/Directory Operations
-//! - File: `file_download`, `file_upload`, `file_cost` (public and private variants)
-//! - Directory: `dir_download`, `dir_upload`, `dir_content_upload` (public and private variants)
+//! ### ❌ Remaining Missing Features (Available in Python Bindings)
 //!
 //! #### Data Streaming
 //! - `DataStream` - Iterator for streaming large data
@@ -46,7 +37,6 @@
 //! - `QuotingMetrics`, `StoreQuote`, `PaymentQuote` - Detailed quote information
 //!
 //! #### Network Configuration
-//! - `EVMNetwork` - Custom EVM network configuration
 //! - `BootstrapCacheConfig` - Bootstrap cache settings
 //! - `InitialPeersConfig` - Initial peers configuration
 //! - `ClientConfig` - Complete client configuration
@@ -64,6 +54,7 @@ use autonomi::client::payment::PaymentOption as AutonomiPaymentOption;
 use bytes::Bytes;
 use std::sync::Arc;
 
+mod archive;
 mod data;
 mod graph_entry;
 mod keys;
@@ -74,6 +65,10 @@ mod self_encryption;
 mod vault;
 
 // Re-export data types
+pub use archive::{
+    ArchiveAddress, ArchiveError, Metadata, PrivateArchive, PrivateArchiveDataMap,
+    PrivateArchiveFileEntry, PublicArchive, PublicArchiveFileEntry,
+};
 pub use data::{Chunk, ChunkAddress, DataAddress, DataError, DataMapChunk};
 pub use graph_entry::{GraphDescendant, GraphEntry, GraphEntryAddress, GraphEntryError};
 pub use keys::{KeyError, PublicKey, SecretKey};
@@ -147,6 +142,69 @@ pub struct RegisterCreateResult {
     pub cost: String,
     /// The address where the register was stored
     pub address: Arc<RegisterAddress>,
+}
+
+/// Result of uploading a public archive to the network
+#[derive(uniffi::Record)]
+pub struct PublicArchivePutResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The address where the archive was stored
+    pub address: Arc<ArchiveAddress>,
+}
+
+/// Result of uploading a private archive to the network
+#[derive(uniffi::Record)]
+pub struct PrivateArchivePutResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The data map to retrieve the archive
+    pub data_map: Arc<DataMapChunk>,
+}
+
+/// Result of uploading a file to the network (private)
+#[derive(uniffi::Record)]
+pub struct FileUploadResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The data map to retrieve the file
+    pub data_map: Arc<DataMapChunk>,
+}
+
+/// Result of uploading a file to the network (public)
+#[derive(uniffi::Record)]
+pub struct FileUploadPublicResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The address where the file was stored
+    pub address: Arc<DataAddress>,
+}
+
+/// Result of uploading a directory to the network (private)
+#[derive(uniffi::Record)]
+pub struct DirUploadResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The data map to retrieve the directory archive
+    pub data_map: Arc<PrivateArchiveDataMap>,
+}
+
+/// Result of uploading directory content (without uploading archive)
+#[derive(uniffi::Record)]
+pub struct DirContentUploadResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The archive containing file references (not uploaded)
+    pub archive: Arc<PrivateArchive>,
+}
+
+/// Result of uploading a public directory to the network
+#[derive(uniffi::Record)]
+pub struct DirUploadPublicResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The address where the directory archive was stored
+    pub address: Arc<ArchiveAddress>,
 }
 
 /// Error type for Autonomi Client operations
@@ -1138,6 +1196,326 @@ impl Client {
         })?;
 
         Ok(cost.to_string())
+    }
+
+    // ===== Archive Methods =====
+
+    /// Get the cost of storing an archive on the network
+    pub async fn archive_cost(&self, archive: Arc<PublicArchive>) -> Result<String, ClientError> {
+        let cost = self.inner.archive_cost(&archive.inner).await.map_err(|e| {
+            ClientError::NetworkError {
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Fetch a public archive from the network
+    pub async fn archive_get_public(
+        &self,
+        address: Arc<ArchiveAddress>,
+    ) -> Result<Arc<PublicArchive>, ClientError> {
+        let archive = self
+            .inner
+            .archive_get_public(&address.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(PublicArchive { inner: archive }))
+    }
+
+    /// Upload a public archive to the network
+    pub async fn archive_put_public(
+        &self,
+        archive: Arc<PublicArchive>,
+        payment: PaymentOption,
+    ) -> Result<PublicArchivePutResult, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .archive_put_public(&archive.inner, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(PublicArchivePutResult {
+            cost: cost.to_string(),
+            address: Arc::new(ArchiveAddress { inner: addr }),
+        })
+    }
+
+    /// Fetch a private archive from the network using its datamap
+    pub async fn archive_get(
+        &self,
+        data_map: Arc<DataMapChunk>,
+    ) -> Result<Arc<PrivateArchive>, ClientError> {
+        let archive = self.inner.archive_get(&data_map.inner).await.map_err(|e| {
+            ClientError::NetworkError {
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(Arc::new(PrivateArchive { inner: archive }))
+    }
+
+    /// Upload a private archive to the network
+    pub async fn archive_put(
+        &self,
+        archive: Arc<PrivateArchive>,
+        payment: PaymentOption,
+    ) -> Result<PrivateArchivePutResult, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, data_map) = self
+            .inner
+            .archive_put(&archive.inner, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(PrivateArchivePutResult {
+            cost: cost.to_string(),
+            data_map: Arc::new(DataMapChunk { inner: data_map }),
+        })
+    }
+
+    // ===== File Operations =====
+
+    /// Get the cost to upload a file to the network
+    pub async fn file_cost(&self, path: String) -> Result<String, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let cost = self
+            .inner
+            .file_cost(&path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Upload a private file to the network
+    /// Returns the DataMapChunk needed to retrieve the file
+    pub async fn file_upload(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<FileUploadResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, data_map) = self
+            .inner
+            .file_content_upload(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(FileUploadResult {
+            cost: cost.to_string(),
+            data_map: Arc::new(DataMapChunk { inner: data_map }),
+        })
+    }
+
+    /// Upload a public file to the network
+    /// Returns the DataAddress where the file is stored
+    pub async fn file_upload_public(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<FileUploadPublicResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .file_content_upload_public(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(FileUploadPublicResult {
+            cost: cost.to_string(),
+            address: Arc::new(DataAddress { inner: addr }),
+        })
+    }
+
+    /// Download a private file from the network to a local path
+    pub async fn file_download(
+        &self,
+        data_map: Arc<DataMapChunk>,
+        path: String,
+    ) -> Result<(), ClientError> {
+        let path = std::path::PathBuf::from(path);
+        self.inner
+            .file_download(&data_map.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    /// Download a public file from the network to a local path
+    pub async fn file_download_public(
+        &self,
+        address: Arc<DataAddress>,
+        path: String,
+    ) -> Result<(), ClientError> {
+        let path = std::path::PathBuf::from(path);
+        self.inner
+            .file_download_public(&address.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    // ===== Directory Operations =====
+
+    /// Upload a directory to the network as a private archive
+    /// Returns the PrivateArchiveDataMap needed to retrieve the directory
+    pub async fn dir_upload(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<DirUploadResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, data_map) = self
+            .inner
+            .dir_upload(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(DirUploadResult {
+            cost: cost.to_string(),
+            data_map: Arc::new(PrivateArchiveDataMap { inner: data_map }),
+        })
+    }
+
+    /// Upload directory content without uploading the archive itself
+    /// Returns a PrivateArchive containing references to the uploaded files
+    pub async fn dir_content_upload(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<DirContentUploadResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, archive) = self
+            .inner
+            .dir_content_upload(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(DirContentUploadResult {
+            cost: cost.to_string(),
+            archive: Arc::new(PrivateArchive { inner: archive }),
+        })
+    }
+
+    /// Upload a directory as a public archive to the network
+    pub async fn dir_upload_public(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<DirUploadPublicResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .dir_upload_public(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(DirUploadPublicResult {
+            cost: cost.to_string(),
+            address: Arc::new(ArchiveAddress { inner: addr }),
+        })
+    }
+
+    /// Download a private directory from the network to a local path
+    pub async fn dir_download(
+        &self,
+        data_map: Arc<PrivateArchiveDataMap>,
+        path: String,
+    ) -> Result<(), ClientError> {
+        let path = std::path::PathBuf::from(path);
+        self.inner
+            .dir_download(&data_map.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    /// Download a public directory from the network to a local path
+    pub async fn dir_download_public(
+        &self,
+        address: Arc<ArchiveAddress>,
+        path: String,
+    ) -> Result<(), ClientError> {
+        let path = std::path::PathBuf::from(path);
+        self.inner
+            .dir_download_public(&address.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
     }
 }
 
