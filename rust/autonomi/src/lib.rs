@@ -16,7 +16,7 @@
 //! - **Keys**: BLS cryptographic keys with hierarchical derivation (MainSecretKey, DerivedSecretKey)
 //! - **Signatures**: BLS signature creation and verification
 //! - **Self-encryption**: Encrypt/decrypt data
-//! - **Registers**: Mutable versioned storage (see `registers` module for missing history iteration)
+//! - **Registers**: Mutable versioned storage with history collection
 //! - **Vaults**: Encrypted user data storage (see `vault` module for missing UserData mutation)
 //! - **Streaming**: DataStream for memory-efficient large data handling
 //!
@@ -76,7 +76,9 @@ pub use key_derivation::{
 };
 pub use keys::{KeyError, PublicKey, SecretKey};
 pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
-pub use registers::{RegisterAddress, RegisterError};
+pub use registers::{
+    RegisterAddress, RegisterError, register_key_from_name, register_value_from_bytes,
+};
 pub use scratchpad::{Scratchpad, ScratchpadAddress, ScratchpadError};
 pub use streaming::DataStream;
 pub use vault::{
@@ -951,11 +953,6 @@ impl Client {
     }
 
     // ===== Register Methods =====
-    //
-    // ❌ MISSING Register APIs (Future Work):
-    // - register_history(addr) -> RegisterHistory iterator - Get version history
-    // - register_key_from_name(owner, name) -> SecretKey - Derive register key from name
-    // - register_value_from_bytes(bytes) -> [u8; 32] - Helper to create register value
 
     /// Create a new register on the network with an initial value
     ///
@@ -1068,6 +1065,24 @@ impl Client {
         })?;
 
         Ok(cost.to_string())
+    }
+
+    /// Get the complete history of a register, from root to latest entry.
+    ///
+    /// Returns a list of 32-byte register values in chronological order.
+    pub async fn register_history_collect(
+        &self,
+        address: Arc<RegisterAddress>,
+    ) -> Result<Vec<Vec<u8>>, ClientError> {
+        let mut history = self.inner.register_history(&address.inner);
+        let values = history
+            .collect()
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(values.into_iter().map(|v| v.to_vec()).collect())
     }
 
     // ===== Vault Methods =====

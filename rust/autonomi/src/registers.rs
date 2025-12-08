@@ -6,22 +6,13 @@
 //!
 //! ## Current Implementation
 //! - ✅ RegisterAddress: Address derived from owner's public key
-//! - ✅ Client methods: register_create, register_update, register_get, register_cost
-//!
-//! ## Missing APIs (available in Python bindings - Future Work)
-//! - ❌ RegisterAddress methods:
-//!   - `as_underlying_graph_root()` - Get underlying graph entry address
-//!   - `as_underlying_head_pointer()` - Get underlying pointer address
-//! - ❌ RegisterHistory type and iteration:
-//!   - `register_history(addr)` - Get version history iterator
-//! - ❌ Helper methods:
-//!   - `register_key_from_name(owner, name)` - Derive register key from name
-//!   - `register_value_from_bytes(bytes)` - Helper to create register value
+//! - ✅ Client methods: register_create, register_update, register_get, register_cost, register_history_collect
+//! - ✅ Helper functions: register_key_from_name, register_value_from_bytes
 
 use autonomi::register::RegisterAddress as AutonomiRegisterAddress;
 use std::sync::Arc;
 
-use crate::keys::PublicKey;
+use crate::keys::{PublicKey, SecretKey};
 
 /// Error type for register operations
 #[derive(Debug, uniffi::Error, thiserror::Error)]
@@ -72,4 +63,24 @@ impl RegisterAddress {
     pub fn to_hex(&self) -> String {
         self.inner.to_hex()
     }
+}
+
+/// Derive a register key from a secret key and a name.
+/// This is useful for creating multiple registers from a single key.
+#[uniffi::export]
+pub fn register_key_from_name(owner: Arc<SecretKey>, name: String) -> Arc<SecretKey> {
+    let key = autonomi::Client::register_key_from_name(&owner.inner, &name);
+    Arc::new(SecretKey { inner: key })
+}
+
+/// Create a register value from bytes.
+/// The input must be at most 32 bytes. If shorter, it will be padded with zeros.
+#[uniffi::export]
+pub fn register_value_from_bytes(bytes: Vec<u8>) -> Result<Vec<u8>, RegisterError> {
+    let value = autonomi::Client::register_value_from_bytes(&bytes).map_err(|e| {
+        RegisterError::InvalidRegister {
+            reason: format!("Invalid register value: {}", e),
+        }
+    })?;
+    Ok(value.to_vec())
 }
