@@ -11,8 +11,8 @@
 //! - **Files**: Upload/download files (public and private)
 //! - **Directories**: Upload/download directories with recursive handling
 //! - **GraphEntry**: Graph-based data structures with parent/child relationships
-//! - **Scratchpad**: Encrypted mutable data with versioning (see `scratchpad` module for minor missing APIs)
-//! - **Pointer**: Mutable pointers to chunks and other pointers (see `pointer` module for missing target variants)
+//! - **Scratchpad**: Encrypted mutable data with versioning and existence checks
+//! - **Pointer**: Mutable pointers to chunks, pointers, graph entries, and scratchpads
 //! - **Keys**: BLS cryptographic keys with hierarchical derivation (MainSecretKey, DerivedSecretKey)
 //! - **Signatures**: BLS signature creation and verification
 //! - **Self-encryption**: Encrypt/decrypt data
@@ -752,6 +752,22 @@ impl Client {
         Ok(cost.to_string())
     }
 
+    /// Check if a pointer exists on the network without fetching it
+    pub async fn pointer_check_existence(
+        &self,
+        addr: Arc<PointerAddress>,
+    ) -> Result<bool, ClientError> {
+        let exists = self
+            .inner
+            .pointer_check_existence(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(exists)
+    }
+
     /// Get a scratchpad from the network by its address
     pub async fn scratchpad_get(
         &self,
@@ -916,6 +932,22 @@ impl Client {
             })?;
 
         Ok(cost.to_string())
+    }
+
+    /// Check if a scratchpad exists on the network without fetching it
+    pub async fn scratchpad_check_existence(
+        &self,
+        addr: Arc<ScratchpadAddress>,
+    ) -> Result<bool, ClientError> {
+        let exists = self
+            .inner
+            .scratchpad_check_existence(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(exists)
     }
 
     // ===== Register Methods =====
