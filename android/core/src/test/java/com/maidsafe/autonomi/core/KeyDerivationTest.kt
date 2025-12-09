@@ -28,10 +28,10 @@ class KeyDerivationTest {
     fun testDerivationIndexFromBytes() {
         // Create an index from specific bytes
         val bytes = ByteArray(32) { it.toByte() }
-        val index = DerivationIndex.fromBytes(bytes.toList())
+        val index = DerivationIndex.fromBytes(bytes)
 
         val resultBytes = index.toBytes()
-        assertArrayEquals("Bytes should round-trip correctly", bytes, resultBytes.toByteArray())
+        assertArrayEquals("Bytes should round-trip correctly", bytes, resultBytes)
     }
 
     @Test
@@ -41,14 +41,14 @@ class KeyDerivationTest {
         val tooLong = ByteArray(64) { it.toByte() }
 
         try {
-            DerivationIndex.fromBytes(tooShort.toList())
+            DerivationIndex.fromBytes(tooShort)
             fail("Should throw for wrong length")
         } catch (e: KeyException.InvalidKey) {
             assertTrue("Error should mention 32 bytes", e.reason.contains("32"))
         }
 
         try {
-            DerivationIndex.fromBytes(tooLong.toList())
+            DerivationIndex.fromBytes(tooLong)
             fail("Should throw for wrong length")
         } catch (e: KeyException.InvalidKey) {
             assertTrue("Error should mention 32 bytes", e.reason.contains("32"))
@@ -141,7 +141,7 @@ class KeyDerivationTest {
         val mainSk = MainSecretKey.random()
         val msg = "Test message".toByteArray(Charsets.UTF_8)
 
-        val signature = mainSk.sign(msg.toList())
+        val signature = mainSk.sign(msg)
 
         assertNotNull("Signature should not be null", signature)
         val sigBytes = signature.toBytes()
@@ -155,12 +155,12 @@ class KeyDerivationTest {
         val mainPk = mainSk.publicKey()
         val msg = "Test message".toByteArray(Charsets.UTF_8)
 
-        val signature = mainSk.sign(msg.toList())
+        val signature = mainSk.sign(msg)
 
         // Verify with correct key and message
         assertTrue(
             "Valid signature should verify",
-            mainPk.verify(signature, msg.toList())
+            mainPk.verify(signature, msg)
         )
     }
 
@@ -172,18 +172,18 @@ class KeyDerivationTest {
         val msg1 = "Test message 1".toByteArray(Charsets.UTF_8)
         val msg2 = "Test message 2".toByteArray(Charsets.UTF_8)
 
-        val signature = mainSk1.sign(msg1.toList())
+        val signature = mainSk1.sign(msg1)
 
         // Wrong key should fail
         assertFalse(
             "Wrong key should fail verification",
-            mainSk2.publicKey().verify(signature, msg1.toList())
+            mainSk2.publicKey().verify(signature, msg1)
         )
 
         // Wrong message should fail
         assertFalse(
             "Wrong message should fail verification",
-            mainSk1.publicKey().verify(signature, msg2.toList())
+            mainSk1.publicKey().verify(signature, msg2)
         )
     }
 
@@ -195,18 +195,18 @@ class KeyDerivationTest {
         val derivedPk = derivedSk.publicKey()
 
         val msg = "Derived key message".toByteArray(Charsets.UTF_8)
-        val signature = derivedSk.sign(msg.toList())
+        val signature = derivedSk.sign(msg)
 
         // Verify with derived pubkey
         assertTrue(
             "Derived signature should verify with derived pubkey",
-            derivedPk.verify(signature, msg.toList())
+            derivedPk.verify(signature, msg)
         )
 
         // Main pubkey should NOT verify derived signature
         assertFalse(
             "Main pubkey should not verify derived signature",
-            mainSk.publicKey().verify(signature, msg.toList())
+            mainSk.publicKey().verify(signature, msg)
         )
     }
 
@@ -240,7 +240,7 @@ class KeyDerivationTest {
         // Test signature hex serialization
         val mainSk = MainSecretKey.random()
         val msg = "Test".toByteArray(Charsets.UTF_8)
-        val signature = mainSk.sign(msg.toList())
+        val signature = mainSk.sign(msg)
 
         val hex = signature.toHex()
         val bytes = signature.toBytes()
@@ -253,7 +253,7 @@ class KeyDerivationTest {
         // Test creating signature from bytes
         val mainSk = MainSecretKey.random()
         val msg = "Test".toByteArray(Charsets.UTF_8)
-        val signature = mainSk.sign(msg.toList())
+        val signature = mainSk.sign(msg)
 
         val bytes = signature.toBytes()
         val restored = Signature.fromBytes(bytes)
@@ -261,7 +261,7 @@ class KeyDerivationTest {
         // Restored signature should also verify
         assertTrue(
             "Restored signature should verify",
-            mainSk.publicKey().verify(restored, msg.toList())
+            mainSk.publicKey().verify(restored, msg)
         )
     }
 
@@ -271,7 +271,7 @@ class KeyDerivationTest {
         val invalidBytes = ByteArray(50) { it.toByte() } // Wrong size
 
         try {
-            Signature.fromBytes(invalidBytes.toList())
+            Signature.fromBytes(invalidBytes)
             fail("Should throw for invalid signature bytes")
         } catch (e: KeyException.InvalidKey) {
             assertTrue("Error should mention 96 bytes", e.reason.contains("96"))
@@ -283,7 +283,7 @@ class KeyDerivationTest {
         // Test signature parity function
         val mainSk = MainSecretKey.random()
         val msg = "Test".toByteArray(Charsets.UTF_8)
-        val signature = mainSk.sign(msg.toList())
+        val signature = mainSk.sign(msg)
 
         // Just verify it returns a boolean
         val parity = signature.parity()

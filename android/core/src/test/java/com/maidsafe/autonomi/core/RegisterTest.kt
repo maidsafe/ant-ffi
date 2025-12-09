@@ -108,17 +108,17 @@ class RegisterTest {
     fun testRegisterValueFromBytes() {
         // Test creating register value from exact 32 bytes
         val bytes = ByteArray(32) { it.toByte() }
-        val value = registerValueFromBytes(bytes.toList())
+        val value = registerValueFromBytes(bytes)
 
         assertEquals("Value should be 32 bytes", 32, value.size)
-        assertArrayEquals("Value should match input", bytes, value.toByteArray())
+        assertArrayEquals("Value should match input", bytes, value)
     }
 
     @Test
     fun testRegisterValueFromBytesPadding() {
         // Test that shorter values get padded
         val shortBytes = ByteArray(16) { it.toByte() }
-        val value = registerValueFromBytes(shortBytes.toList())
+        val value = registerValueFromBytes(shortBytes)
 
         assertEquals("Value should be padded to 32 bytes", 32, value.size)
 
@@ -137,7 +137,7 @@ class RegisterTest {
     fun testRegisterValueFromBytesEmpty() {
         // Test with empty input
         val emptyBytes = ByteArray(0)
-        val value = registerValueFromBytes(emptyBytes.toList())
+        val value = registerValueFromBytes(emptyBytes)
 
         assertEquals("Empty input should produce 32 zero bytes", 32, value.size)
         assertTrue("All bytes should be zero", value.all { it == 0.toByte() })
@@ -149,7 +149,7 @@ class RegisterTest {
         val tooLong = ByteArray(64) { it.toByte() }
 
         try {
-            registerValueFromBytes(tooLong.toList())
+            registerValueFromBytes(tooLong)
             fail("Should throw for values over 32 bytes")
         } catch (e: RegisterException.InvalidRegister) {
             assertTrue("Error should mention size", e.reason.isNotEmpty())
@@ -187,7 +187,7 @@ class RegisterTest {
 
         // Use case 1: Store a 32-byte hash
         val hash = ByteArray(32) { (it * 7).toByte() }
-        val hashValue = registerValueFromBytes(hash.toList())
+        val hashValue = registerValueFromBytes(hash)
         assertEquals("Hash should be stored exactly", 32, hashValue.size)
 
         // Use case 2: Store a counter (8 bytes)
@@ -197,12 +197,12 @@ class RegisterTest {
         for (i in 0 until 8) {
             counter[7 - i] = ((num shr (i * 8)) and 0xFF).toByte()
         }
-        val counterValue = registerValueFromBytes(counter.toList())
+        val counterValue = registerValueFromBytes(counter)
         assertEquals("Counter should be padded", 32, counterValue.size)
 
         // Use case 3: Store a string reference
         val stringRef = "Hello".toByteArray(Charsets.UTF_8)
-        val stringValue = registerValueFromBytes(stringRef.toList())
+        val stringValue = registerValueFromBytes(stringRef)
         assertEquals("String should be padded", 32, stringValue.size)
     }
 
