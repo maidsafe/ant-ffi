@@ -4,7 +4,9 @@ Android and iOS bindings for the Autonomi network.
 
 [![JitPack](https://jitpack.io/v/maidsafe/ant-ffi.svg)](https://jitpack.io/#maidsafe/ant-ffi)
 
-## Android Installation
+## Android
+
+### Installation
 
 Add JitPack repository to your `settings.gradle.kts`:
 
@@ -27,7 +29,7 @@ dependencies {
 
 > **Note:** JNA AAR must be added explicitly for Android native library support.
 
-## Quick Start
+### Quick Start
 
 ```kotlin
 import uniffi.ant_ffi.*
@@ -55,7 +57,22 @@ val data = client.dataGetPublic(result.address)
 println("Downloaded: ${String(data)}")
 ```
 
-## iOS Installation
+### Usage Examples
+
+For comprehensive usage examples, see the test files in [`android/core/src/test/java/com/maidsafe/autonomi/core/`](android/core/src/test/java/com/maidsafe/autonomi/core/):
+
+| Test File | Features Covered |
+|-----------|------------------|
+| `RegisterNetworkTest.kt` | Register create, read, update, history |
+| `PointerNetworkTest.kt` | Pointer create, get, update, existence check |
+| `ScratchpadNetworkTest.kt` | Scratchpad create, decrypt, update |
+| `FileNetworkTest.kt` | Private/public data, file upload/download, archives |
+| `KeyDerivationTest.kt` | BLS key derivation from mnemonics |
+| `ArchiveTest.kt` | Archive and metadata operations |
+
+## iOS
+
+### Installation
 
 Add to your `Package.swift`:
 
