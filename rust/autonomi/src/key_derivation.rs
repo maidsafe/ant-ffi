@@ -13,8 +13,8 @@ use autonomi::client::key_derivation::{
     DerivedSecretKey as AutonomiDerivedSecretKey, MainPubkey as AutonomiMainPubkey,
     MainSecretKey as AutonomiMainSecretKey,
 };
-use blsttc::rand as bls_rand;
 use blsttc::Signature as AutonomiSignature;
+use blsttc::rand as bls_rand;
 use std::sync::Arc;
 
 use crate::keys::{KeyError, PublicKey, SecretKey};
