@@ -69,8 +69,10 @@ build_xcframework() {
     ditto -c -k --sequesterRsrc --keepParent target/ios/lib$1-rs.xcframework target/ios/lib$1-rs.xcframework.zip
     checksum=$(swift package compute-checksum target/ios/lib$1-rs.xcframework.zip)
     version=$(cargo metadata --format-version 1 | jq -r --arg pkg_name "$1" '.packages[] | select(.name==$pkg_name) .version')
-    sed -i "" -E "s/(let releaseTag = \")[^\"]+(\")/\1$version\2/g" ../Package.swift
-    sed -i "" -E "s/(let releaseChecksum = \")[^\"]+(\")/\1$checksum\2/g" ../Package.swift
+    # Update Package.swift with release info (use [^\"]* to match empty strings too)
+    sed -i "" -E "s/(let releaseTag = \")[^\"]*(\")/\1v$version\2/g" ../Package.swift
+    sed -i "" -E "s/(let releaseChecksum = \")[^\"]*(\")/\1$checksum\2/g" ../Package.swift
+    echo "Updated Package.swift with releaseTag=v$version and checksum"
   fi
 }
 

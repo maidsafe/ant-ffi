@@ -9,8 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  build-android:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
 
     steps:
       - uses: actions/checkout@v4
@@ -52,11 +54,114 @@ jobs:
       - name: Rename AAR with version
         run: mv android/core/build/outputs/aar/core-release.aar android/core/build/outputs/aar/autonomi-core-${{ steps.version.outputs.VERSION }}.aar
 
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aar
+          path: android/core/build/outputs/aar/autonomi-core-${{ steps.version.outputs.VERSION }}.aar
+
+  build-ios:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios,aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            rust/target/
+          key: ${{ runner.os }}-cargo-ios-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ios-release-
+            ${{ runner.os }}-cargo-ios-
+
+      - name: Build iOS XCFramework (full release)
+        run: ./build-ios.sh --full --release
+        working-directory: rust
+
+      - name: Get checksum
+        id: checksum
+        run: |
+          CHECKSUM=$(swift package compute-checksum rust/target/ios/libant_ffi-rs.xcframework.zip)
+          echo "CHECKSUM=$CHECKSUM" >> $GITHUB_OUTPUT
+          echo "XCFramework checksum: $CHECKSUM"
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcframework
+          path: rust/target/ios/libant_ffi-rs.xcframework.zip
+
+    outputs:
+      checksum: ${{ steps.checksum.outputs.CHECKSUM }}
+
+  create-release:
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-aar
+          path: artifacts/
+
+      - name: Download iOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-xcframework
+          path: artifacts/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            android/core/build/outputs/aar/autonomi-core-${{ steps.version.outputs.VERSION }}.aar
+            artifacts/autonomi-core-${{ needs.build-android.outputs.version }}.aar
+            artifacts/libant_ffi-rs.xcframework.zip
+          body: |
+            ## Installation
+
+            ### Android
+            ```kotlin
+            dependencies {
+                implementation("com.github.maidsafe:ant-ffi:${{ github.ref_name }}")
+                implementation("net.java.dev.jna:jna:5.15.0@aar")
+            }
+            ```
+
+            ### iOS
+            Add to your `Package.swift`:
+            ```swift
+            dependencies: [
+                .package(url: "https://github.com/maidsafe/ant-ffi.git", from: "${{ needs.build-android.outputs.version }}")
+            ]
+            ```
+
+            **XCFramework checksum:** `${{ needs.build-ios.outputs.checksum }}`
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Package.swift with release info
+        run: |
+          sed -i -E 's/let releaseTag = "[^"]*"/let releaseTag = "${{ github.ref_name }}"/' Package.swift
+          sed -i -E 's/let releaseChecksum = "[^"]*"/let releaseChecksum = "${{ needs.build-ios.outputs.checksum }}"/' Package.swift
+
+      - name: Commit Package.swift update
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update Package.swift for ${{ github.ref_name }} release"
+          file_pattern: Package.swift
+          branch: main
