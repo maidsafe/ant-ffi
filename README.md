@@ -22,7 +22,7 @@ Add the dependency to your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.maidsafe:ant-ffi:0.0.16")
+    implementation("com.github.maidsafe:ant-ffi:v0.0.15")
     implementation("net.java.dev.jna:jna:5.15.0@aar")
 }
 ```
@@ -78,7 +78,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maidsafe/ant-ffi.git", from: "0.0.16")
+    .package(url: "https://github.com/maidsafe/ant-ffi.git", from: "0.0.15")
 ]
 ```
 
