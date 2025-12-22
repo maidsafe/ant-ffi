@@ -22,7 +22,7 @@ Add the dependency to your module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.maidsafe:ant-ffi:v0.0.12")
+    implementation("com.github.maidsafe:ant-ffi:0.0.16")
     implementation("net.java.dev.jna:jna:5.15.0@aar")
 }
 ```
@@ -78,9 +78,58 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/maidsafe/ant-ffi.git", from: "1.0.0")
+    .package(url: "https://github.com/maidsafe/ant-ffi.git", from: "0.0.16")
 ]
 ```
+
+Then add `Autonomi` to your target dependencies:
+
+```swift
+.target(
+    name: "YourApp",
+    dependencies: ["Autonomi"]
+)
+```
+
+> **Note:** The XCFramework is pre-built and downloaded automatically via Swift Package Manager. No Rust toolchain required.
+
+### Quick Start
+
+```swift
+import Autonomi
+
+// Encrypt and decrypt data locally
+let data: [UInt8] = Array("Hello, Autonomi!".utf8)
+let encrypted = try encrypt(data)
+let decrypted = try decrypt(encrypted)
+print(String(bytes: decrypted, encoding: .utf8)!)
+
+// Initialize client (when network is available)
+let client = try await Client.init()
+
+// Create a wallet
+let network = try Network.custom(
+    rpcUrl: "https://your-rpc-url",
+    paymentTokenAddress: "0x...",
+    dataPaymentsAddress: "0x..."
+)
+let wallet = try Wallet.fromPrivateKey(network: network, privateKey: "your-private-key")
+
+// Upload data
+let result = try await client.dataPutPublic(
+    data: Data("Hello Autonomi!".utf8),
+    payment: .walletPayment(wallet)
+)
+print("Uploaded to: \(result.address)")
+
+// Download data
+let downloaded = try await client.dataGetPublic(address: result.address)
+print("Downloaded: \(String(data: downloaded, encoding: .utf8)!)")
+```
+
+### Usage Examples
+
+For usage examples, see the test files in [`apple/Tests/AutonomiTests/`](apple/Tests/AutonomiTests/).
 
 ## Available APIs
 

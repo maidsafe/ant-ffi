@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
   contents: write
@@ -15,6 +15,14 @@ jobs:
       version: ${{ steps.version.outputs.VERSION }}
 
     steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h
+
       - uses: actions/checkout@v4
         with:
           submodules: true
@@ -36,7 +44,7 @@ jobs:
 
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -156,12 +164,26 @@ jobs:
 
       - name: Update Package.swift with release info
         run: |
-          sed -i -E 's/let releaseTag = "[^"]*"/let releaseTag = "${{ github.ref_name }}"/' Package.swift
+          VERSION="${{ needs.build-android.outputs.version }}"
+          sed -i -E "s/let releaseTag = \"[^\"]*\"/let releaseTag = \"$VERSION\"/" Package.swift
           sed -i -E 's/let releaseChecksum = "[^"]*"/let releaseChecksum = "${{ needs.build-ios.outputs.checksum }}"/' Package.swift
+          cat Package.swift | head -10
 
       - name: Commit Package.swift update
         uses: stefanzweifel/git-auto-commit-action@v5
+        id: commit
         with:
-          commit_message: "chore: update Package.swift for ${{ github.ref_name }} release"
+          commit_message: "chore: update Package.swift for ${{ needs.build-android.outputs.version }} release"
           file_pattern: Package.swift
           branch: main
+
+      - name: Move tag to new commit
+        if: steps.commit.outputs.changes_detected == 'true'
+        run: |
+          VERSION="${{ needs.build-android.outputs.version }}"
+          # Delete the old tag (both locally and remotely)
+          git tag -d "$VERSION" 2>/dev/null || true
+          git push origin ":refs/tags/$VERSION" 2>/dev/null || true
+          # Create new tag at current commit (which includes updated Package.swift)
+          git tag "$VERSION"
+          git push origin "$VERSION"
