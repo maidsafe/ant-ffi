@@ -1,3 +1,17 @@
+//! Scratchpad module - Encrypted mutable data with versioning on the Autonomi network
+//!
+//! ## Current Implementation
+//! - ✅ ScratchpadAddress: Address derived from owner's public key
+//! - ✅ Scratchpad: Encrypted mutable data with counter/versioning
+//! - ✅ Methods: decrypt_data, owner, counter, data_encoding, scratchpad_hash, encrypted_data_hash, encrypted_data
+//! - ✅ Client methods: scratchpad_create, scratchpad_update, scratchpad_update_from, scratchpad_get
+//! - ✅ Client methods: scratchpad_put, scratchpad_put_update, scratchpad_get_from_public_key, scratchpad_cost
+//! - ✅ Static verification: scratchpad_verify
+//!
+//! ## Missing APIs (available in Python bindings)
+//! - ❌ Scratchpad method: `signature()` - Get the signature bytes
+//! - ❌ Client method: `scratchpad_check_existence(addr)` - Check if scratchpad exists without fetching
+
 use autonomi::scratchpad::{
     Scratchpad as AutonomiScratchpad, ScratchpadAddress as AutonomiScratchpadAddress,
 };
@@ -36,10 +50,11 @@ impl ScratchpadAddress {
     /// Create a ScratchpadAddress from a hex string
     #[uniffi::constructor]
     pub fn from_hex(hex: String) -> Result<Arc<Self>, ScratchpadError> {
-        let inner = AutonomiScratchpadAddress::from_hex(&hex)
-            .map_err(|e| ScratchpadError::ParsingFailed {
+        let inner = AutonomiScratchpadAddress::from_hex(&hex).map_err(|e| {
+            ScratchpadError::ParsingFailed {
                 reason: format!("Failed to parse hex: {}", e),
-            })?;
+            }
+        })?;
         Ok(Arc::new(Self { inner }))
     }
 
@@ -104,12 +119,12 @@ impl Scratchpad {
 
     /// Decrypt the data using the owner's secret key
     pub fn decrypt_data(&self, sk: Arc<SecretKey>) -> Result<Vec<u8>, ScratchpadError> {
-        let data = self
-            .inner
-            .decrypt_data(&sk.inner)
-            .map_err(|e| ScratchpadError::DecryptionFailed {
-                reason: format!("Failed to decrypt: {}", e),
-            })?;
+        let data =
+            self.inner
+                .decrypt_data(&sk.inner)
+                .map_err(|e| ScratchpadError::DecryptionFailed {
+                    reason: format!("Failed to decrypt: {}", e),
+                })?;
         Ok(data.to_vec())
     }
 
