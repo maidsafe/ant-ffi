@@ -23,10 +23,9 @@
 
         androidComposition = pkgs.androidenv.composeAndroidPackages {
           platformVersions = [ "34" "35" "36" ];
-          buildToolsVersions = [ "34.0.0" "36.0.0" ];
+          buildToolsVersions = [ "34.0.0" "35.0.0" "36.0.0" ];
           systemImageTypes = [ "google_apis_playstore" ];
-          # abiVersions = [ "armeabi-v7a" "arm64-v8a" ];
-          abiVersions = [ "x86" "x86_64" ];
+          abiVersions = [ "armeabi-v7a" "arm64-v8a" "x86" "x86_64" ];
           includeNDK = true;
           includeExtras = [ "extras;google;auto" ];
           includeEmulator = true;
@@ -35,36 +34,38 @@
       in
       {
         # For `nix develop`:
-        devShell = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [
-            # Fixes a broken bash shell (e.g. no autocomplete)
-            bashInteractive
-            # Rust tools
-            toolchain
+        devShell = pkgs.mkShell
+          ({
+            nativeBuildInputs = with pkgs; [
+              # Fixes a broken bash shell (e.g. no autocomplete)
+              bashInteractive
+              # Rust tools
+              toolchain
+            ] ++ pkgs.lib.optionals (pkgs.hostPlatform.isLinux) [
+              # Android
+              gradle_9
+              jdk # For gradle(w)
+              ktlint
+              ktfmt
+              cargo-ndk
+              androidComposition.androidsdk
+              (android-studio.withSdk (androidComposition.androidsdk))
+            ];
 
-            # Android
-            gradle_9
-            jdk # For gradle(w)
-            ktlint
-            ktfmt
-            cargo-ndk
-            androidComposition.androidsdk
-            (android-studio.withSdk (androidComposition.androidsdk))
-          ];
+            RUSTFLAGS = builtins.concatStringsSep " " [
+              # Debug information is slow to generate and makes the binary larger
+              "-C strip=debuginfo"
+              "-C debuginfo=0"
+            ];
 
+            # Required as `autonomi` depends on `protoc` somewhere in the build phase.
+            PROTOC = "${pkgs.protobuf}/bin/protoc";
+          } // pkgs.lib.optionalAttrs (pkgs.hostPlatform.isLinux) {
           # override the aapt2 that gradle uses with the nix-shipped version
           GRADLE_OPTS = "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidComposition.androidsdk}/libexec/android-sdk/build-tools/36.0.0/aapt2";
           ANDROID_NDK_HOME = "${androidComposition.androidsdk}/libexec/android-sdk/ndk-bundle";
-
-          RUSTFLAGS = builtins.concatStringsSep " " [
-            # Debug information is slow to generate and makes the binary larger
-            "-C strip=debuginfo"
-            "-C debuginfo=0"
-          ];
-
-          # Required as `autonomi` depends on `protoc` somewhere in the build phase.
-          PROTOC = "${pkgs.protobuf}/bin/protoc";
-        };
+          ANDROID_HOME = "${androidComposition.androidsdk}/libexec/android-sdk";
+        });
       }
     );
 }
