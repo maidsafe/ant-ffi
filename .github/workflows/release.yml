@@ -1,0 +1,189 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+        working-directory: android
+
+      - name: Create local.properties
+        run: echo 'stadiaApiKey=' > local.properties
+        working-directory: android
+
+      # NOTE: No CARGO_NDK_TARGET_ARCH env var = builds ALL architectures
+      - name: Build Release AAR (all architectures)
+        working-directory: android
+        run: ./gradlew :core:assembleRelease -PVERSION_NAME=${{ steps.version.outputs.VERSION }}
+
+      - name: Rename AAR with version
+        run: mv android/core/build/outputs/aar/core-release.aar android/core/build/outputs/aar/autonomi-core-${{ steps.version.outputs.VERSION }}.aar
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-aar
+          path: android/core/build/outputs/aar/autonomi-core-${{ steps.version.outputs.VERSION }}.aar
+
+  build-ios:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios,aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            rust/target/
+          key: ${{ runner.os }}-cargo-ios-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ios-release-
+            ${{ runner.os }}-cargo-ios-
+
+      - name: Build iOS XCFramework (full release)
+        run: ./build-ios.sh --full --release
+        working-directory: rust
+
+      - name: Get checksum
+        id: checksum
+        run: |
+          CHECKSUM=$(swift package compute-checksum rust/target/ios/libant_ffi-rs.xcframework.zip)
+          echo "CHECKSUM=$CHECKSUM" >> $GITHUB_OUTPUT
+          echo "XCFramework checksum: $CHECKSUM"
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcframework
+          path: rust/target/ios/libant_ffi-rs.xcframework.zip
+
+    outputs:
+      checksum: ${{ steps.checksum.outputs.CHECKSUM }}
+
+  create-release:
+    needs: [build-android, build-ios]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-aar
+          path: artifacts/
+
+      - name: Download iOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-xcframework
+          path: artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/autonomi-core-${{ needs.build-android.outputs.version }}.aar
+            artifacts/libant_ffi-rs.xcframework.zip
+          body: |
+            ## Installation
+
+            ### Android
+            ```kotlin
+            dependencies {
+                implementation("com.github.maidsafe:ant-ffi:${{ github.ref_name }}")
+                implementation("net.java.dev.jna:jna:5.15.0@aar")
+            }
+            ```
+
+            ### iOS
+            Add to your `Package.swift`:
+            ```swift
+            dependencies: [
+                .package(url: "https://github.com/maidsafe/ant-ffi.git", from: "${{ github.ref_name }}")
+            ]
+            ```
+
+            **XCFramework checksum:** `${{ needs.build-ios.outputs.checksum }}`
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Package.swift with release info
+        run: |
+          VERSION="${{ needs.build-android.outputs.version }}"
+          sed -i -E "s/let releaseTag = \"[^\"]*\"/let releaseTag = \"$VERSION\"/" Package.swift
+          sed -i -E 's/let releaseChecksum = "[^"]*"/let releaseChecksum = "${{ needs.build-ios.outputs.checksum }}"/' Package.swift
+          cat Package.swift | head -10
+
+      - name: Commit Package.swift update
+        uses: stefanzweifel/git-auto-commit-action@v5
+        id: commit
+        with:
+          commit_message: "chore: update Package.swift for ${{ needs.build-android.outputs.version }} release"
+          file_pattern: Package.swift
+          branch: main
+
+      - name: Move tag to new commit
+        if: steps.commit.outputs.changes_detected == 'true'
+        run: |
+          VERSION="${{ needs.build-android.outputs.version }}"
+          # Delete the old tag (both locally and remotely)
+          git tag -d "$VERSION" 2>/dev/null || true
+          git push origin ":refs/tags/$VERSION" 2>/dev/null || true
+          # Create new tag at current commit (which includes updated Package.swift)
+          git tag "$VERSION"
+          git push origin "$VERSION"

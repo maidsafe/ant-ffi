@@ -7,8 +7,8 @@ import Foundation
 // Depending on the consumer's build setup, the low-level FFI code
 // might be in a separate module, or it might be compiled inline into
 // this module. This is a bit of light hackery to work with both.
-#if canImport(autonomiFFI)
-import autonomiFFI
+#if canImport(ant_ffiFFI)
+import ant_ffiFFI
 #endif
 
 fileprivate extension RustBuffer {
@@ -25,13 +25,13 @@ fileprivate extension RustBuffer {
     }
 
     static func from(_ ptr: UnsafeBufferPointer<UInt8>) -> RustBuffer {
-        try! rustCall { ffi_autonomi_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
+        try! rustCall { ffi_ant_ffi_rustbuffer_from_bytes(ForeignBytes(bufferPointer: ptr), $0) }
     }
 
     // Frees the buffer in place.
     // The buffer must not be used after this is called.
     func deallocate() {
-        try! rustCall { ffi_autonomi_rustbuffer_free(self, $0) }
+        try! rustCall { ffi_ant_ffi_rustbuffer_free(self, $0) }
     }
 }
 
@@ -399,15 +399,23 @@ fileprivate class UniffiHandleMap<T> {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterInt64: FfiConverterPrimitive {
-    typealias FfiType = Int64
-    typealias SwiftType = Int64
+fileprivate struct FfiConverterBool : FfiConverter {
+    typealias FfiType = Int8
+    typealias SwiftType = Bool
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Int64 {
+    public static func lift(_ value: Int8) throws -> Bool {
+        return value != 0
+    }
+
+    public static func lower(_ value: Bool) -> Int8 {
+        return value ? 1 : 0
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bool {
         return try lift(readInt(&buf))
     }
 
-    public static func write(_ value: Int64, into buf: inout [UInt8]) {
+    public static func write(_ value: Bool, into buf: inout [UInt8]) {
         writeInt(&buf, lower(value))
     }
 }
@@ -456,28 +464,18 @@ fileprivate struct FfiConverterString: FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterDuration: FfiConverterRustBuffer {
-    typealias SwiftType = TimeInterval
+fileprivate struct FfiConverterData: FfiConverterRustBuffer {
+    typealias SwiftType = Data
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TimeInterval {
-        let seconds: UInt64 = try readInt(&buf)
-        let nanoseconds: UInt32 = try readInt(&buf)
-        return Double(seconds) + (Double(nanoseconds) / 1.0e9)
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        let len: Int32 = try readInt(&buf)
+        return Data(try readBytes(&buf, count: Int(len)))
     }
 
-    public static func write(_ value: TimeInterval, into buf: inout [UInt8]) {
-        if value.rounded(.down) > Double(Int64.max) {
-            fatalError("Duration overflow, exceeds max bounds supported by Uniffi")
-        }
-
-        if value < 0 {
-            fatalError("Invalid duration, must be non-negative")
-        }
-
-        let seconds = UInt64(value)
-        let nanoseconds = UInt32((value - Double(seconds)) * 1.0e9)
-        writeInt(&buf, seconds)
-        writeInt(&buf, nanoseconds)
+    public static func write(_ value: Data, into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        writeBytes(&buf, value)
     }
 }
 
@@ -485,19 +483,29 @@ fileprivate struct FfiConverterDuration: FfiConverterRustBuffer {
 
 
 /**
- * A binary operator that performs some mathematical operation with two numbers.
+ * Autonomi network client
  */
-public protocol BinaryOperator : AnyObject {
+public protocol ClientProtocol : AnyObject {
     
-    func perform(lhs: Int64, rhs: Int64) throws  -> Int64
+    /**
+     * Fetch public data from the network using a hex-encoded data address
+     */
+    func dataGetPublic(addressHex: String) async throws  -> Data
+    
+    /**
+     * Upload data to the network as public data
+     *
+     * Returns the upload result containing price and data address
+     */
+    func dataPutPublic(data: Data, payment: PaymentOption) async throws  -> UploadResult
     
 }
 
 /**
- * A binary operator that performs some mathematical operation with two numbers.
+ * Autonomi network client
  */
-open class BinaryOperatorImpl:
-    BinaryOperator {
+open class Client:
+    ClientProtocol {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -531,7 +539,7 @@ open class BinaryOperatorImpl:
     @_documentation(visibility: private)
 #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_autonomi_fn_clone_binaryoperator(self.pointer, $0) }
+        return try! rustCall { uniffi_ant_ffi_fn_clone_client(self.pointer, $0) }
     }
     // No primary constructor declared for this class.
 
@@ -540,98 +548,110 @@ open class BinaryOperatorImpl:
             return
         }
 
-        try! rustCall { uniffi_autonomi_fn_free_binaryoperator(pointer, $0) }
+        try! rustCall { uniffi_ant_ffi_fn_free_client(pointer, $0) }
     }
 
     
-
-    
-open func perform(lhs: Int64, rhs: Int64)throws  -> Int64 {
-    return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_autonomi_fn_method_binaryoperator_perform(self.uniffiClonePointer(),
-        FfiConverterInt64.lower(lhs),
-        FfiConverterInt64.lower(rhs),$0
-    )
-})
-}
-    
-
-}
-// Magic number for the Rust proxy to call using the same mechanism as every other method,
-// to free the callback once it's dropped by Rust.
-private let IDX_CALLBACK_FREE: Int32 = 0
-// Callback return codes
-private let UNIFFI_CALLBACK_SUCCESS: Int32 = 0
-private let UNIFFI_CALLBACK_ERROR: Int32 = 1
-private let UNIFFI_CALLBACK_UNEXPECTED_ERROR: Int32 = 2
-
-// Put the implementation in a struct so we don't pollute the top-level namespace
-fileprivate struct UniffiCallbackInterfaceBinaryOperator {
-
-    // Create the VTable using a series of closures.
-    // Swift automatically converts these into C callback functions.
-    static var vtable: UniffiVTableCallbackInterfaceBinaryOperator = UniffiVTableCallbackInterfaceBinaryOperator(
-        perform: { (
-            uniffiHandle: UInt64,
-            lhs: Int64,
-            rhs: Int64,
-            uniffiOutReturn: UnsafeMutablePointer<Int64>,
-            uniffiCallStatus: UnsafeMutablePointer<RustCallStatus>
-        ) in
-            let makeCall = {
-                () throws -> Int64 in
-                guard let uniffiObj = try? FfiConverterTypeBinaryOperator.handleMap.get(handle: uniffiHandle) else {
-                    throw UniffiInternalError.unexpectedStaleHandle
-                }
-                return try uniffiObj.perform(
-                     lhs: try FfiConverterInt64.lift(lhs),
-                     rhs: try FfiConverterInt64.lift(rhs)
+    /**
+     * Initialize a new Autonomi client connected to the production network
+     */
+public static func `init`()async throws  -> Client {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_constructor_client_init(
                 )
-            }
-
-            
-            let writeReturn = { uniffiOutReturn.pointee = FfiConverterInt64.lower($0) }
-            uniffiTraitInterfaceCallWithError(
-                callStatus: uniffiCallStatus,
-                makeCall: makeCall,
-                writeReturn: writeReturn,
-                lowerError: FfiConverterTypeComputationError.lower
-            )
-        },
-        uniffiFree: { (uniffiHandle: UInt64) -> () in
-            let result = try? FfiConverterTypeBinaryOperator.handleMap.remove(handle: uniffiHandle)
-            if result == nil {
-                print("Uniffi callback interface BinaryOperator: handle missing in uniffiFree")
-            }
-        }
-    )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeClient.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
 }
+    
+    /**
+     * Initialize a new Autonomi client connected to a local testnet
+     */
+public static func initLocal()async throws  -> Client {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_constructor_client_init_local(
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeClient.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
 
-private func uniffiCallbackInitBinaryOperator() {
-    uniffi_autonomi_fn_init_callback_vtable_binaryoperator(&UniffiCallbackInterfaceBinaryOperator.vtable)
+    
+    /**
+     * Fetch public data from the network using a hex-encoded data address
+     */
+open func dataGetPublic(addressHex: String)async throws  -> Data {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_data_get_public(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(addressHex)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterData.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Upload data to the network as public data
+     *
+     * Returns the upload result containing price and data address
+     */
+open func dataPutPublic(data: Data, payment: PaymentOption)async throws  -> UploadResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_data_put_public(
+                    self.uniffiClonePointer(),
+                    FfiConverterData.lower(data),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeUploadResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeBinaryOperator: FfiConverter {
-    fileprivate static var handleMap = UniffiHandleMap<BinaryOperator>()
+public struct FfiConverterTypeClient: FfiConverter {
 
     typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = BinaryOperator
+    typealias SwiftType = Client
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> BinaryOperator {
-        return BinaryOperatorImpl(unsafeFromRawPointer: pointer)
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Client {
+        return Client(unsafeFromRawPointer: pointer)
     }
 
-    public static func lower(_ value: BinaryOperator) -> UnsafeMutableRawPointer {
-        guard let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: handleMap.insert(obj: value))) else {
-            fatalError("Cast to UnsafeMutableRawPointer failed")
-        }
-        return ptr
+    public static func lower(_ value: Client) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BinaryOperator {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Client {
         let v: UInt64 = try readInt(&buf)
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
@@ -642,7 +662,7 @@ public struct FfiConverterTypeBinaryOperator: FfiConverter {
         return try lift(ptr!)
     }
 
-    public static func write(_ value: BinaryOperator, into buf: inout [UInt8]) {
+    public static func write(_ value: Client, into buf: inout [UInt8]) {
         // This fiddling is because `Int` is the thing that's the same size as a pointer.
         // The Rust code won't compile if a pointer won't fit in a `UInt64`.
         writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
@@ -655,50 +675,32 @@ public struct FfiConverterTypeBinaryOperator: FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeBinaryOperator_lift(_ pointer: UnsafeMutableRawPointer) throws -> BinaryOperator {
-    return try FfiConverterTypeBinaryOperator.lift(pointer)
+public func FfiConverterTypeClient_lift(_ pointer: UnsafeMutableRawPointer) throws -> Client {
+    return try FfiConverterTypeClient.lift(pointer)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeBinaryOperator_lower(_ value: BinaryOperator) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeBinaryOperator.lower(value)
+public func FfiConverterTypeClient_lower(_ value: Client) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeClient.lower(value)
 }
 
 
 
 
 /**
- * A somewhat silly demonstration of functional core/imperative shell in the form of a calculator with arbitrary operators.
- *
- * Operations return a new calculator with updated internal state reflecting the computation.
+ * Network configuration for connecting to Autonomi
  */
-public protocol CalculatorProtocol : AnyObject {
-    
-    /**
-     * Performs a calculation using the supplied binary operator and operands.
-     */
-    func calculate(op: BinaryOperator, lhs: Int64, rhs: Int64) throws  -> Calculator
-    
-    /**
-     * Performs a calculation using the supplied binary operator, the last computation result, and the supplied operand.
-     *
-     * The supplied operand will be the right-hand side in the mathematical operation.
-     */
-    func calculateMore(op: BinaryOperator, rhs: Int64) throws  -> Calculator
-    
-    func lastResult()  -> ComputationResult?
+public protocol NetworkProtocol : AnyObject {
     
 }
 
 /**
- * A somewhat silly demonstration of functional core/imperative shell in the form of a calculator with arbitrary operators.
- *
- * Operations return a new calculator with updated internal state reflecting the computation.
+ * Network configuration for connecting to Autonomi
  */
-open class Calculator:
-    CalculatorProtocol {
+open class Network:
+    NetworkProtocol {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -732,61 +734,34 @@ open class Calculator:
     @_documentation(visibility: private)
 #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_autonomi_fn_clone_calculator(self.pointer, $0) }
+        return try! rustCall { uniffi_ant_ffi_fn_clone_network(self.pointer, $0) }
     }
-public convenience init() {
-    let pointer =
-        try! rustCall() {
-    uniffi_autonomi_fn_constructor_calculator_new($0
-    )
-}
-    self.init(unsafeFromRawPointer: pointer)
-}
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_autonomi_fn_free_calculator(pointer, $0) }
-    }
-
-    
-
-    
     /**
-     * Performs a calculation using the supplied binary operator and operands.
-     */
-open func calculate(op: BinaryOperator, lhs: Int64, rhs: Int64)throws  -> Calculator {
-    return try  FfiConverterTypeCalculator.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_autonomi_fn_method_calculator_calculate(self.uniffiClonePointer(),
-        FfiConverterTypeBinaryOperator.lower(op),
-        FfiConverterInt64.lower(lhs),
-        FfiConverterInt64.lower(rhs),$0
-    )
-})
-}
-    
-    /**
-     * Performs a calculation using the supplied binary operator, the last computation result, and the supplied operand.
+     * Create a new network configuration
      *
-     * The supplied operand will be the right-hand side in the mathematical operation.
+     * # Arguments
+     * * `is_local` - If true, connects to local testnet. If false, connects to production network.
      */
-open func calculateMore(op: BinaryOperator, rhs: Int64)throws  -> Calculator {
-    return try  FfiConverterTypeCalculator.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_autonomi_fn_method_calculator_calculate_more(self.uniffiClonePointer(),
-        FfiConverterTypeBinaryOperator.lower(op),
-        FfiConverterInt64.lower(rhs),$0
+public convenience init(isLocal: Bool)throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypeNetworkError.lift) {
+    uniffi_ant_ffi_fn_constructor_network_new(
+        FfiConverterBool.lower(isLocal),$0
     )
-})
 }
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_network(pointer, $0) }
+    }
+
     
-open func lastResult() -> ComputationResult? {
-    return try!  FfiConverterOptionTypeComputationResult.lift(try! rustCall() {
-    uniffi_autonomi_fn_method_calculator_last_result(self.uniffiClonePointer(),$0
-    )
-})
-}
+
     
 
 }
@@ -794,20 +769,20 @@ open func lastResult() -> ComputationResult? {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeCalculator: FfiConverter {
+public struct FfiConverterTypeNetwork: FfiConverter {
 
     typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = Calculator
+    typealias SwiftType = Network
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Calculator {
-        return Calculator(unsafeFromRawPointer: pointer)
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Network {
+        return Network(unsafeFromRawPointer: pointer)
     }
 
-    public static func lower(_ value: Calculator) -> UnsafeMutableRawPointer {
+    public static func lower(_ value: Network) -> UnsafeMutableRawPointer {
         return value.uniffiClonePointer()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Calculator {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Network {
         let v: UInt64 = try readInt(&buf)
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
@@ -818,7 +793,7 @@ public struct FfiConverterTypeCalculator: FfiConverter {
         return try lift(ptr!)
     }
 
-    public static func write(_ value: Calculator, into buf: inout [UInt8]) {
+    public static func write(_ value: Network, into buf: inout [UInt8]) {
         // This fiddling is because `Int` is the thing that's the same size as a pointer.
         // The Rust code won't compile if a pointer won't fit in a `UInt64`.
         writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
@@ -831,28 +806,42 @@ public struct FfiConverterTypeCalculator: FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCalculator_lift(_ pointer: UnsafeMutableRawPointer) throws -> Calculator {
-    return try FfiConverterTypeCalculator.lift(pointer)
+public func FfiConverterTypeNetwork_lift(_ pointer: UnsafeMutableRawPointer) throws -> Network {
+    return try FfiConverterTypeNetwork.lift(pointer)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeCalculator_lower(_ value: Calculator) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeCalculator.lower(value)
+public func FfiConverterTypeNetwork_lower(_ value: Network) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeNetwork.lower(value)
 }
 
 
 
 
-public protocol SafeAdditionProtocol : AnyObject {
+/**
+ * Wallet for paying for operations on the Autonomi network
+ */
+public protocol WalletProtocol : AnyObject {
     
-    func perform(lhs: Int64, rhs: Int64) throws  -> Int64
+    /**
+     * Get the wallet's address
+     */
+    func address()  -> String
+    
+    /**
+     * Get the wallet's token balance
+     */
+    func balanceOfTokens() async throws  -> String
     
 }
 
-open class SafeAddition:
-    SafeAdditionProtocol {
+/**
+ * Wallet for paying for operations on the Autonomi network
+ */
+open class Wallet:
+    WalletProtocol {
     fileprivate let pointer: UnsafeMutableRawPointer!
 
     /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
@@ -886,35 +875,65 @@ open class SafeAddition:
     @_documentation(visibility: private)
 #endif
     public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_autonomi_fn_clone_safeaddition(self.pointer, $0) }
+        return try! rustCall { uniffi_ant_ffi_fn_clone_wallet(self.pointer, $0) }
     }
-public convenience init() {
-    let pointer =
-        try! rustCall() {
-    uniffi_autonomi_fn_constructor_safeaddition_new($0
-    )
-}
-    self.init(unsafeFromRawPointer: pointer)
-}
+    // No primary constructor declared for this class.
 
     deinit {
         guard let pointer = pointer else {
             return
         }
 
-        try! rustCall { uniffi_autonomi_fn_free_safeaddition(pointer, $0) }
+        try! rustCall { uniffi_ant_ffi_fn_free_wallet(pointer, $0) }
     }
 
     
-
-    
-open func perform(lhs: Int64, rhs: Int64)throws  -> Int64 {
-    return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_autonomi_fn_method_safeaddition_perform(self.uniffiClonePointer(),
-        FfiConverterInt64.lower(lhs),
-        FfiConverterInt64.lower(rhs),$0
+    /**
+     * Create a new wallet from a private key
+     *
+     * # Arguments
+     * * `network` - The network configuration
+     * * `private_key` - Hex-encoded private key (with or without 0x prefix)
+     */
+public static func newFromPrivateKey(network: Network, privateKey: String)throws  -> Wallet {
+    return try  FfiConverterTypeWallet.lift(try rustCallWithError(FfiConverterTypeWalletError.lift) {
+    uniffi_ant_ffi_fn_constructor_wallet_new_from_private_key(
+        FfiConverterTypeNetwork.lower(network),
+        FfiConverterString.lower(privateKey),$0
     )
 })
+}
+    
+
+    
+    /**
+     * Get the wallet's address
+     */
+open func address() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_wallet_address(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the wallet's token balance
+     */
+open func balanceOfTokens()async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_wallet_balance_of_tokens(
+                    self.uniffiClonePointer()
+                    
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeWalletError.lift
+        )
 }
     
 
@@ -923,20 +942,20 @@ open func perform(lhs: Int64, rhs: Int64)throws  -> Int64 {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeSafeAddition: FfiConverter {
+public struct FfiConverterTypeWallet: FfiConverter {
 
     typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = SafeAddition
+    typealias SwiftType = Wallet
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SafeAddition {
-        return SafeAddition(unsafeFromRawPointer: pointer)
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Wallet {
+        return Wallet(unsafeFromRawPointer: pointer)
     }
 
-    public static func lower(_ value: SafeAddition) -> UnsafeMutableRawPointer {
+    public static func lower(_ value: Wallet) -> UnsafeMutableRawPointer {
         return value.uniffiClonePointer()
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SafeAddition {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Wallet {
         let v: UInt64 = try readInt(&buf)
         // The Rust code won't compile if a pointer won't fit in a UInt64.
         // We have to go via `UInt` because that's the thing that's the size of a pointer.
@@ -947,7 +966,7 @@ public struct FfiConverterTypeSafeAddition: FfiConverter {
         return try lift(ptr!)
     }
 
-    public static func write(_ value: SafeAddition, into buf: inout [UInt8]) {
+    public static func write(_ value: Wallet, into buf: inout [UInt8]) {
         // This fiddling is because `Int` is the thing that's the same size as a pointer.
         // The Rust code won't compile if a pointer won't fit in a `UInt64`.
         writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
@@ -960,175 +979,61 @@ public struct FfiConverterTypeSafeAddition: FfiConverter {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeSafeAddition_lift(_ pointer: UnsafeMutableRawPointer) throws -> SafeAddition {
-    return try FfiConverterTypeSafeAddition.lift(pointer)
+public func FfiConverterTypeWallet_lift(_ pointer: UnsafeMutableRawPointer) throws -> Wallet {
+    return try FfiConverterTypeWallet.lift(pointer)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeSafeAddition_lower(_ value: SafeAddition) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeSafeAddition.lower(value)
+public func FfiConverterTypeWallet_lower(_ value: Wallet) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeWallet.lower(value)
 }
 
 
-
-
-public protocol SafeDivisionProtocol : AnyObject {
-    
-    func perform(lhs: Int64, rhs: Int64) throws  -> Int64
-    
-}
-
-open class SafeDivision:
-    SafeDivisionProtocol {
-    fileprivate let pointer: UnsafeMutableRawPointer!
-
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public struct NoPointer {
-        public init() {}
-    }
-
-    // TODO: We'd like this to be `private` but for Swifty reasons,
-    // we can't implement `FfiConverter` without making this `required` and we can't
-    // make it `required` without making it `public`.
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
-    }
-
-    // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
-    //
-    // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
-    }
-
-#if swift(>=5.8)
-    @_documentation(visibility: private)
-#endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_autonomi_fn_clone_safedivision(self.pointer, $0) }
-    }
-public convenience init() {
-    let pointer =
-        try! rustCall() {
-    uniffi_autonomi_fn_constructor_safedivision_new($0
-    )
-}
-    self.init(unsafeFromRawPointer: pointer)
-}
-
-    deinit {
-        guard let pointer = pointer else {
-            return
-        }
-
-        try! rustCall { uniffi_autonomi_fn_free_safedivision(pointer, $0) }
-    }
-
-    
-
-    
-open func perform(lhs: Int64, rhs: Int64)throws  -> Int64 {
-    return try  FfiConverterInt64.lift(try rustCallWithError(FfiConverterTypeComputationError.lift) {
-    uniffi_autonomi_fn_method_safedivision_perform(self.uniffiClonePointer(),
-        FfiConverterInt64.lower(lhs),
-        FfiConverterInt64.lower(rhs),$0
-    )
-})
-}
-    
-
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public struct FfiConverterTypeSafeDivision: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
-    typealias SwiftType = SafeDivision
-
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SafeDivision {
-        return SafeDivision(unsafeFromRawPointer: pointer)
-    }
-
-    public static func lower(_ value: SafeDivision) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
-    }
-
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SafeDivision {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
-    }
-
-    public static func write(_ value: SafeDivision, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
-    }
-}
-
-
-
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSafeDivision_lift(_ pointer: UnsafeMutableRawPointer) throws -> SafeDivision {
-    return try FfiConverterTypeSafeDivision.lift(pointer)
-}
-
-#if swift(>=5.8)
-@_documentation(visibility: private)
-#endif
-public func FfiConverterTypeSafeDivision_lower(_ value: SafeDivision) -> UnsafeMutableRawPointer {
-    return FfiConverterTypeSafeDivision.lower(value)
-}
-
-
-public struct ComputationResult {
-    public var value: Int64
-    public var computationTime: TimeInterval
+/**
+ * Represents encrypted data with a datamap chunk and content chunks
+ */
+public struct EncryptedData {
+    /**
+     * The serialized datamap chunk that contains metadata about the encrypted data
+     */
+    public var datamapChunk: Data
+    /**
+     * The encrypted content chunks
+     */
+    public var contentChunks: [Data]
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(value: Int64, computationTime: TimeInterval) {
-        self.value = value
-        self.computationTime = computationTime
+    public init(
+        /**
+         * The serialized datamap chunk that contains metadata about the encrypted data
+         */datamapChunk: Data, 
+        /**
+         * The encrypted content chunks
+         */contentChunks: [Data]) {
+        self.datamapChunk = datamapChunk
+        self.contentChunks = contentChunks
     }
 }
 
 
 
-extension ComputationResult: Equatable, Hashable {
-    public static func ==(lhs: ComputationResult, rhs: ComputationResult) -> Bool {
-        if lhs.value != rhs.value {
+extension EncryptedData: Equatable, Hashable {
+    public static func ==(lhs: EncryptedData, rhs: EncryptedData) -> Bool {
+        if lhs.datamapChunk != rhs.datamapChunk {
             return false
         }
-        if lhs.computationTime != rhs.computationTime {
+        if lhs.contentChunks != rhs.contentChunks {
             return false
         }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(value)
-        hasher.combine(computationTime)
+        hasher.combine(datamapChunk)
+        hasher.combine(contentChunks)
     }
 }
 
@@ -1136,18 +1041,18 @@ extension ComputationResult: Equatable, Hashable {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeComputationResult: FfiConverterRustBuffer {
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ComputationResult {
+public struct FfiConverterTypeEncryptedData: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EncryptedData {
         return
-            try ComputationResult(
-                value: FfiConverterInt64.read(from: &buf), 
-                computationTime: FfiConverterDuration.read(from: &buf)
+            try EncryptedData(
+                datamapChunk: FfiConverterData.read(from: &buf), 
+                contentChunks: FfiConverterSequenceData.read(from: &buf)
         )
     }
 
-    public static func write(_ value: ComputationResult, into buf: inout [UInt8]) {
-        FfiConverterInt64.write(value.value, into: &buf)
-        FfiConverterDuration.write(value.computationTime, into: &buf)
+    public static func write(_ value: EncryptedData, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.datamapChunk, into: &buf)
+        FfiConverterSequenceData.write(value.contentChunks, into: &buf)
     }
 }
 
@@ -1155,75 +1060,287 @@ public struct FfiConverterTypeComputationResult: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeComputationResult_lift(_ buf: RustBuffer) throws -> ComputationResult {
-    return try FfiConverterTypeComputationResult.lift(buf)
+public func FfiConverterTypeEncryptedData_lift(_ buf: RustBuffer) throws -> EncryptedData {
+    return try FfiConverterTypeEncryptedData.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeComputationResult_lower(_ value: ComputationResult) -> RustBuffer {
-    return FfiConverterTypeComputationResult.lower(value)
+public func FfiConverterTypeEncryptedData_lower(_ value: EncryptedData) -> RustBuffer {
+    return FfiConverterTypeEncryptedData.lower(value)
 }
 
 
-public enum ComputationError {
+/**
+ * Result of uploading data to the network
+ */
+public struct UploadResult {
+    /**
+     * The price paid for the upload in tokens
+     */
+    public var price: String
+    /**
+     * The hex-encoded data address where the data was stored
+     */
+    public var address: String
 
-    
-    
-    case DivisionByZero
-    case Overflow
-    case IllegalComputationWithInitState
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The price paid for the upload in tokens
+         */price: String, 
+        /**
+         * The hex-encoded data address where the data was stored
+         */address: String) {
+        self.price = price
+        self.address = address
+    }
+}
+
+
+
+extension UploadResult: Equatable, Hashable {
+    public static func ==(lhs: UploadResult, rhs: UploadResult) -> Bool {
+        if lhs.price != rhs.price {
+            return false
+        }
+        if lhs.address != rhs.address {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(price)
+        hasher.combine(address)
+    }
 }
 
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeComputationError: FfiConverterRustBuffer {
-    typealias SwiftType = ComputationError
+public struct FfiConverterTypeUploadResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UploadResult {
+        return
+            try UploadResult(
+                price: FfiConverterString.read(from: &buf), 
+                address: FfiConverterString.read(from: &buf)
+        )
+    }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ComputationError {
+    public static func write(_ value: UploadResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.price, into: &buf)
+        FfiConverterString.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUploadResult_lift(_ buf: RustBuffer) throws -> UploadResult {
+    return try FfiConverterTypeUploadResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUploadResult_lower(_ value: UploadResult) -> RustBuffer {
+    return FfiConverterTypeUploadResult.lower(value)
+}
+
+
+/**
+ * Error type for Autonomi Client operations
+ */
+public enum ClientError {
+
+    
+    
+    case NetworkError(reason: String
+    )
+    case InitializationFailed(reason: String
+    )
+    case InvalidAddress(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeClientError: FfiConverterRustBuffer {
+    typealias SwiftType = ClientError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ClientError {
         let variant: Int32 = try readInt(&buf)
         switch variant {
 
         
 
         
-        case 1: return .DivisionByZero
-        case 2: return .Overflow
-        case 3: return .IllegalComputationWithInitState
+        case 1: return .NetworkError(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .InitializationFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .InvalidAddress(
+            reason: try FfiConverterString.read(from: &buf)
+            )
 
          default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: ComputationError, into buf: inout [UInt8]) {
+    public static func write(_ value: ClientError, into buf: inout [UInt8]) {
         switch value {
 
         
 
         
         
-        case .DivisionByZero:
+        case let .NetworkError(reason):
             writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
         
-        
-        case .Overflow:
+        case let .InitializationFailed(reason):
             writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
         
-        
-        case .IllegalComputationWithInitState:
+        case let .InvalidAddress(reason):
             writeInt(&buf, Int32(3))
-        
+            FfiConverterString.write(reason, into: &buf)
+            
         }
     }
 }
 
 
-extension ComputationError: Equatable, Hashable {}
+extension ClientError: Equatable, Hashable {}
 
-extension ComputationError: Foundation.LocalizedError {
+extension ClientError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
+ * Error type for encryption/decryption operations
+ */
+public enum EncryptionError {
+
+    
+    
+    case EncryptionFailed(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEncryptionError: FfiConverterRustBuffer {
+    typealias SwiftType = EncryptionError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> EncryptionError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .EncryptionFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: EncryptionError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .EncryptionFailed(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+extension EncryptionError: Equatable, Hashable {}
+
+extension EncryptionError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
+ * Error type for Network operations
+ */
+public enum NetworkError {
+
+    
+    
+    case CreationFailed(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkError: FfiConverterRustBuffer {
+    typealias SwiftType = NetworkError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .CreationFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: NetworkError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .CreationFailed(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+extension NetworkError: Equatable, Hashable {}
+
+extension NetworkError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -1231,14 +1348,16 @@ extension ComputationError: Foundation.LocalizedError {
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Payment option for paid operations
+ */
 
-public enum ComputationState {
+public enum PaymentOption {
     
     /**
-     * Initial state with no value computed
+     * Pay using a wallet
      */
-    case `init`
-    case computed(result: ComputationResult
+    case walletPayment(walletRef: Wallet
     )
 }
 
@@ -1246,33 +1365,27 @@ public enum ComputationState {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public struct FfiConverterTypeComputationState: FfiConverterRustBuffer {
-    typealias SwiftType = ComputationState
+public struct FfiConverterTypePaymentOption: FfiConverterRustBuffer {
+    typealias SwiftType = PaymentOption
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ComputationState {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PaymentOption {
         let variant: Int32 = try readInt(&buf)
         switch variant {
         
-        case 1: return .`init`
-        
-        case 2: return .computed(result: try FfiConverterTypeComputationResult.read(from: &buf)
+        case 1: return .walletPayment(walletRef: try FfiConverterTypeWallet.read(from: &buf)
         )
         
         default: throw UniffiInternalError.unexpectedEnumCase
         }
     }
 
-    public static func write(_ value: ComputationState, into buf: inout [UInt8]) {
+    public static func write(_ value: PaymentOption, into buf: inout [UInt8]) {
         switch value {
         
         
-        case .`init`:
+        case let .walletPayment(walletRef):
             writeInt(&buf, Int32(1))
-        
-        
-        case let .computed(result):
-            writeInt(&buf, Int32(2))
-            FfiConverterTypeComputationResult.write(result, into: &buf)
+            FfiConverterTypeWallet.write(walletRef, into: &buf)
             
         }
     }
@@ -1282,55 +1395,181 @@ public struct FfiConverterTypeComputationState: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeComputationState_lift(_ buf: RustBuffer) throws -> ComputationState {
-    return try FfiConverterTypeComputationState.lift(buf)
+public func FfiConverterTypePaymentOption_lift(_ buf: RustBuffer) throws -> PaymentOption {
+    return try FfiConverterTypePaymentOption.lift(buf)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeComputationState_lower(_ value: ComputationState) -> RustBuffer {
-    return FfiConverterTypeComputationState.lower(value)
+public func FfiConverterTypePaymentOption_lower(_ value: PaymentOption) -> RustBuffer {
+    return FfiConverterTypePaymentOption.lower(value)
 }
 
 
 
-extension ComputationState: Equatable, Hashable {}
 
+
+/**
+ * Error type for Wallet operations
+ */
+public enum WalletError {
+
+    
+    
+    case CreationFailed(reason: String
+    )
+    case BalanceCheckFailed(reason: String
+    )
+}
 
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-fileprivate struct FfiConverterOptionTypeComputationResult: FfiConverterRustBuffer {
-    typealias SwiftType = ComputationResult?
+public struct FfiConverterTypeWalletError: FfiConverterRustBuffer {
+    typealias SwiftType = WalletError
 
-    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
-        guard let value = value else {
-            writeInt(&buf, Int8(0))
-            return
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> WalletError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .CreationFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .BalanceCheckFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
         }
-        writeInt(&buf, Int8(1))
-        FfiConverterTypeComputationResult.write(value, into: &buf)
     }
 
-    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
-        switch try readInt(&buf) as Int8 {
-        case 0: return nil
-        case 1: return try FfiConverterTypeComputationResult.read(from: &buf)
-        default: throw UniffiInternalError.unexpectedOptionalTag
+    public static func write(_ value: WalletError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .CreationFailed(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .BalanceCheckFailed(reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
         }
     }
 }
-public func safeAdditionOperator() -> BinaryOperator {
-    return try!  FfiConverterTypeBinaryOperator.lift(try! rustCall() {
-    uniffi_autonomi_fn_func_safe_addition_operator($0
+
+
+extension WalletError: Equatable, Hashable {}
+
+extension WalletError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
+    typealias SwiftType = [Data]
+
+    public static func write(_ value: [Data], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterData.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Data] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Data]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterData.read(from: &buf))
+        }
+        return seq
+    }
+}
+private let UNIFFI_RUST_FUTURE_POLL_READY: Int8 = 0
+private let UNIFFI_RUST_FUTURE_POLL_MAYBE_READY: Int8 = 1
+
+fileprivate let uniffiContinuationHandleMap = UniffiHandleMap<UnsafeContinuation<Int8, Never>>()
+
+fileprivate func uniffiRustCallAsync<F, T>(
+    rustFutureFunc: () -> UInt64,
+    pollFunc: (UInt64, @escaping UniffiRustFutureContinuationCallback, UInt64) -> (),
+    completeFunc: (UInt64, UnsafeMutablePointer<RustCallStatus>) -> F,
+    freeFunc: (UInt64) -> (),
+    liftFunc: (F) throws -> T,
+    errorHandler: ((RustBuffer) throws -> Swift.Error)?
+) async throws -> T {
+    // Make sure to call uniffiEnsureInitialized() since future creation doesn't have a
+    // RustCallStatus param, so doesn't use makeRustCall()
+    uniffiEnsureInitialized()
+    let rustFuture = rustFutureFunc()
+    defer {
+        freeFunc(rustFuture)
+    }
+    var pollResult: Int8;
+    repeat {
+        pollResult = await withUnsafeContinuation {
+            pollFunc(
+                rustFuture,
+                uniffiFutureContinuationCallback,
+                uniffiContinuationHandleMap.insert(obj: $0)
+            )
+        }
+    } while pollResult != UNIFFI_RUST_FUTURE_POLL_READY
+
+    return try liftFunc(makeRustCall(
+        { completeFunc(rustFuture, $0) },
+        errorHandler: errorHandler
+    ))
+}
+
+// Callback handlers for an async calls.  These are invoked by Rust when the future is ready.  They
+// lift the return value or error and resume the suspended function.
+fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: Int8) {
+    if let continuation = try? uniffiContinuationHandleMap.remove(handle: handle) {
+        continuation.resume(returning: pollResult)
+    } else {
+        print("uniffiFutureContinuationCallback invalid handle")
+    }
+}
+/**
+ * Decrypts data that was previously encrypted with the encrypt function
+ *
+ * Takes the datamap chunk and content chunks returned from encrypt
+ * and reconstructs the original data
+ */
+public func decrypt(encryptedData: EncryptedData)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeEncryptionError.lift) {
+    uniffi_ant_ffi_fn_func_decrypt(
+        FfiConverterTypeEncryptedData.lower(encryptedData),$0
     )
 })
 }
-public func safeDivisionOperator() -> BinaryOperator {
-    return try!  FfiConverterTypeBinaryOperator.lift(try! rustCall() {
-    uniffi_autonomi_fn_func_safe_division_operator($0
+/**
+ * Encrypts data using self-encryption algorithm
+ *
+ * Takes raw bytes and returns encrypted chunks along with a datamap chunk
+ * that can be used to decrypt the data later
+ */
+public func encrypt(data: Data)throws  -> EncryptedData {
+    return try  FfiConverterTypeEncryptedData.lift(try rustCallWithError(FfiConverterTypeEncryptionError.lift) {
+    uniffi_ant_ffi_fn_func_encrypt(
+        FfiConverterData.lower(data),$0
     )
 })
 }
@@ -1346,45 +1585,41 @@ private var initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
     let bindings_contract_version = 26
     // Get the scaffolding contract version by calling the into the dylib
-    let scaffolding_contract_version = ffi_autonomi_uniffi_contract_version()
+    let scaffolding_contract_version = ffi_ant_ffi_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_autonomi_checksum_func_safe_addition_operator() != 2550) {
+    if (uniffi_ant_ffi_checksum_func_decrypt() != 44871) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_autonomi_checksum_func_safe_division_operator() != 26772) {
+    if (uniffi_ant_ffi_checksum_func_encrypt() != 35938) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_autonomi_checksum_method_binaryoperator_perform() != 14159) {
+    if (uniffi_ant_ffi_checksum_method_client_data_get_public() != 34643) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_autonomi_checksum_method_calculator_calculate() != 63226) {
+    if (uniffi_ant_ffi_checksum_method_client_data_put_public() != 9296) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_autonomi_checksum_method_calculator_calculate_more() != 55050) {
+    if (uniffi_ant_ffi_checksum_method_wallet_address() != 40064) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_autonomi_checksum_method_calculator_last_result() != 48598) {
+    if (uniffi_ant_ffi_checksum_method_wallet_balance_of_tokens() != 6774) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_autonomi_checksum_method_safeaddition_perform() != 41639) {
+    if (uniffi_ant_ffi_checksum_constructor_client_init() != 46398) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_autonomi_checksum_method_safedivision_perform() != 11259) {
+    if (uniffi_ant_ffi_checksum_constructor_client_init_local() != 15883) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_autonomi_checksum_constructor_calculator_new() != 50473) {
+    if (uniffi_ant_ffi_checksum_constructor_network_new() != 56950) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_autonomi_checksum_constructor_safeaddition_new() != 7323) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_autonomi_checksum_constructor_safedivision_new() != 18654) {
+    if (uniffi_ant_ffi_checksum_constructor_wallet_new_from_private_key() != 13669) {
         return InitializationResult.apiChecksumMismatch
     }
 
-    uniffiCallbackInitBinaryOperator()
     return InitializationResult.ok
 }()
 
