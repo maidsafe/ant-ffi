@@ -3,17 +3,25 @@
 
 import PackageDescription
 
-let binaryTarget: Target = .binaryTarget(
-    name: "AutonomiCoreRS",
-    // IMPORTANT: Swift packages importing this locally will not be able to
-    // import the rust core unless you use a relative path.
-    // This ONLY works for local development. For a larger scale usage example, see https://github.com/stadiamaps/ferrostar.
-    // When you release a public package, you will need to build a release XCFramework,
-    // upload it somewhere (usually with your release), and update Package.swift.
-    // This will probably be the subject of a future blog.
-    // Again, see Ferrostar for a more complex example, including more advanced GitHub actions.
-    path: "./rust/target/ios/libant_ffi-rs.xcframework"
-)
+// Release configuration - updated automatically by CI on release
+let releaseTag = "v0.0.15"
+let releaseChecksum = "061a7168ad3f4591cc8e0d8373c97a2aff56085a533813dccbd75e039ca3273f"
+
+// Use remote binary for releases, local path for development
+let binaryTarget: Target
+if !releaseTag.isEmpty {
+    binaryTarget = .binaryTarget(
+        name: "AutonomiCoreRS",
+        url: "https://github.com/maidsafe/ant-ffi/releases/download/\(releaseTag)/libant_ffi-rs.xcframework.zip",
+        checksum: releaseChecksum
+    )
+} else {
+    // Local development: run `cd rust && ./build-ios.sh` first
+    binaryTarget = .binaryTarget(
+        name: "AutonomiCoreRS",
+        path: "./rust/target/ios/libant_ffi-rs.xcframework"
+    )
+}
 
 let package = Package(
     name: "Autonomi",

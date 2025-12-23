@@ -1,3 +1,12 @@
+//! Pointer module - Mutable pointers to data on the Autonomi network
+//!
+//! ## Current Implementation
+//! - ✅ PointerAddress: Address derived from owner's public key
+//! - ✅ NetworkPointer: Versioned mutable pointer with counter
+//! - ✅ PointerTarget: Can point to Chunk, Pointer, GraphEntry, or Scratchpad
+//! - ✅ Client methods: pointer_create, pointer_update, pointer_update_from, pointer_get, pointer_put, pointer_cost, pointer_check_existence
+//! - ✅ Static verification: pointer_verify
+
 use autonomi::pointer::{
     Pointer as AutonomiPointer, PointerAddress as AutonomiPointerAddress,
     PointerTarget as AutonomiPointerTarget,
@@ -5,7 +14,9 @@ use autonomi::pointer::{
 use std::sync::Arc;
 
 use crate::data::ChunkAddress;
+use crate::graph_entry::GraphEntryAddress;
 use crate::keys::{PublicKey, SecretKey};
+use crate::scratchpad::ScratchpadAddress;
 
 /// Error type for pointer operations
 #[derive(Debug, uniffi::Error, thiserror::Error)]
@@ -114,6 +125,22 @@ impl PointerTarget {
     pub fn pointer(addr: Arc<PointerAddress>) -> Arc<Self> {
         Arc::new(Self {
             inner: AutonomiPointerTarget::PointerAddress(addr.inner),
+        })
+    }
+
+    /// Create a pointer target pointing to a graph entry
+    #[uniffi::constructor]
+    pub fn graph_entry(addr: Arc<GraphEntryAddress>) -> Arc<Self> {
+        Arc::new(Self {
+            inner: AutonomiPointerTarget::GraphEntryAddress(addr.inner),
+        })
+    }
+
+    /// Create a pointer target pointing to a scratchpad
+    #[uniffi::constructor]
+    pub fn scratchpad(addr: Arc<ScratchpadAddress>) -> Arc<Self> {
+        Arc::new(Self {
+            inner: AutonomiPointerTarget::ScratchpadAddress(addr.inner),
         })
     }
 

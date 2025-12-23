@@ -805,9 +805,9 @@ dependencies = [
 
 [[package]]
 name = "ant-bootstrap"
-version = "0.2.10"
+version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9fcc8926994650f50066d591ee60f6a19486189b7d92e7528180cb23b23bdce"
+checksum = "a2a74bcc6ad8991c1688264dc70fddc57603e9e12c20536e1422352daabba20c"
 dependencies = [
  "ant-logging",
  "ant-protocol",
@@ -871,7 +871,7 @@ dependencies = [
  "hex",
  "libp2p",
  "rmp-serde",
- "self_encryption 0.34.2",
+ "self_encryption 0.34.3",
  "thiserror 1.0.69",
  "tokio",
  "uniffi",
@@ -1351,9 +1351,9 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
 name = "autonomi"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4097e084c85e7ee5145bbfc968b1118b313a50d4fb9fe12b2dd9ea9b3b5688ad"
+checksum = "7d52bee36db86424606022c9fb2c1a4e55a65260bee42acef21984d1cd064202"
 dependencies = [
  "ant-bootstrap",
  "ant-evm",
@@ -1376,7 +1376,7 @@ dependencies = [
  "rayon",
  "rmp-serde",
  "self_encryption 0.30.0",
- "self_encryption 0.34.2",
+ "self_encryption 0.34.3",
  "serde",
  "sha2",
  "thiserror 1.0.69",
@@ -1677,9 +1677,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "1.8.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ac0150caa2ae65ca5bd83f25c7de183dea78d4d366469f148435e2acfbad0da"
+checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
 dependencies = [
  "serde",
 ]
@@ -5593,9 +5593,9 @@ dependencies = [
 
 [[package]]
 name = "self_encryption"
-version = "0.34.2"
+version = "0.34.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b64f0a0beeb7e5e98c76a53af19519f552c1b2fcd7c781c5b839063d34e6604"
+checksum = "45480c8fa045f158ab05f445ce7d0b6dfcb6e3028d91b78013271b48daa435b2"
 dependencies = [
  "aes",
  "bincode",

@@ -1,3 +1,23 @@
+//! Keys module - BLS cryptographic keys for the Autonomi network
+//!
+//! ## Current Implementation
+//! - ✅ SecretKey: BLS secret key with random generation and hex serialization
+//! - ✅ PublicKey: BLS public key derived from secret key
+//! - ✅ Methods: random, from_hex, to_hex, public_key
+//!
+//! ## Missing APIs (available in Python bindings)
+//! - ❌ Hierarchical Key Derivation:
+//!   - `MainSecretKey` - Master secret key for deriving child keys
+//!   - `MainPubkey` - Master public key
+//!   - `DerivedSecretKey` - Derived secret key from master key
+//!   - `DerivedPubkey` - Derived public key
+//!   - `DerivationIndex` - Index for deriving keys
+//! - ❌ Signature Operations:
+//!   - `Signature` type
+//!   - `Signature::from_bytes(bytes)` - Create signature from bytes
+//!   - `signature.to_bytes()` - Serialize signature
+//!   - `signature.parity()` - Get signature parity
+
 use blsttc::{PublicKey as AutonomiPublicKey, SecretKey as AutonomiSecretKey};
 use std::sync::Arc;
 

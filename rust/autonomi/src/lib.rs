@@ -1,20 +1,89 @@
+//! Autonomi UniFFI Bindings - Kotlin/Swift bindings for the Autonomi network
+//!
+//! This library provides FFI bindings to the Autonomi network for use with Kotlin (Android/JVM)
+//! and Swift (iOS/macOS). The bindings are generated using UniFFI from Mozilla.
+//!
+//! ## Current Module Implementation Status
+//!
+//! ### ✅ Fully Implemented
+//! - **Data**: Chunks, public/private data storage, streaming
+//! - **Archives**: PublicArchive, PrivateArchive, Metadata, file collections
+//! - **Files**: Upload/download files (public and private)
+//! - **Directories**: Upload/download directories with recursive handling
+//! - **GraphEntry**: Graph-based data structures with parent/child relationships
+//! - **Scratchpad**: Encrypted mutable data with versioning and existence checks
+//! - **Pointer**: Mutable pointers to chunks, pointers, graph entries, and scratchpads
+//! - **Keys**: BLS cryptographic keys with hierarchical derivation (MainSecretKey, DerivedSecretKey)
+//! - **Signatures**: BLS signature creation and verification
+//! - **Self-encryption**: Encrypt/decrypt data
+//! - **Registers**: Mutable versioned storage with history collection
+//! - **Vaults**: Encrypted user data storage (see `vault` module for missing UserData mutation)
+//! - **Streaming**: DataStream for memory-efficient large data handling
+//!
+//! ### ❌ Remaining Missing Features (Available in Python Bindings)
+//!
+//! #### Event System
+//! - `ClientEvent` - Event types for monitoring
+//! - `ClientEventReceiver` - Event stream receiver
+//! - Method: `enable_client_events`
+//!
+//! #### Advanced Payment & Transactions
+//! - `TransactionConfig` - Transaction settings
+//! - `MaxFeePerGas` - Gas fee configuration
+//! - `PaymentMode` - Standard vs SingleNode payment
+//! - `Receipt` - Payment receipts
+//! - `QuotingMetrics`, `StoreQuote`, `PaymentQuote` - Detailed quote information
+//!
+//! #### Network Configuration
+//! - `BootstrapCacheConfig` - Bootstrap cache settings
+//! - `InitialPeersConfig` - Initial peers configuration
+//! - `ClientConfig` - Complete client configuration
+//! - `RetryStrategy`, `Quorum`, `Strategy`, `Backoff` - Network resilience
+//!
+//! ## Implementation Notes
+//!
+//! Each module's documentation contains detailed information about:
+//! - What APIs are currently implemented (✅)
+//! - What APIs are missing compared to Python bindings (❌)
+//!
+//! When implementing new features, always document skipped functionality in code comments.
+
 use autonomi::client::payment::PaymentOption as AutonomiPaymentOption;
 use bytes::Bytes;
 use std::sync::Arc;
 
+mod archive;
 mod data;
 mod graph_entry;
+mod key_derivation;
 mod keys;
 mod pointer;
+mod registers;
 mod scratchpad;
 mod self_encryption;
+mod streaming;
+mod vault;
 
 // Re-export data types
+pub use archive::{
+    ArchiveAddress, ArchiveError, Metadata, PrivateArchive, PrivateArchiveDataMap,
+    PrivateArchiveFileEntry, PublicArchive, PublicArchiveFileEntry,
+};
 pub use data::{Chunk, ChunkAddress, DataAddress, DataError, DataMapChunk};
 pub use graph_entry::{GraphDescendant, GraphEntry, GraphEntryAddress, GraphEntryError};
+pub use key_derivation::{
+    DerivationIndex, DerivedPubkey, DerivedSecretKey, MainPubkey, MainSecretKey, Signature,
+};
 pub use keys::{KeyError, PublicKey, SecretKey};
 pub use pointer::{NetworkPointer, PointerAddress, PointerError, PointerTarget};
+pub use registers::{
+    RegisterAddress, RegisterError, register_key_from_name, register_value_from_bytes,
+};
 pub use scratchpad::{Scratchpad, ScratchpadAddress, ScratchpadError};
+pub use streaming::DataStream;
+pub use vault::{
+    FileArchiveEntry, PrivateFileArchiveEntry, UserData, VaultError, VaultGetResult, VaultSecretKey,
+};
 
 uniffi::setup_scaffolding!();
 
@@ -70,6 +139,78 @@ pub struct GraphEntryPutResult {
     pub cost: String,
     /// The address where the graph entry was stored
     pub address: Arc<GraphEntryAddress>,
+}
+
+/// Result of creating a register on the network
+#[derive(uniffi::Record)]
+pub struct RegisterCreateResult {
+    /// The cost paid for creating the register in tokens
+    pub cost: String,
+    /// The address where the register was stored
+    pub address: Arc<RegisterAddress>,
+}
+
+/// Result of uploading a public archive to the network
+#[derive(uniffi::Record)]
+pub struct PublicArchivePutResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The address where the archive was stored
+    pub address: Arc<ArchiveAddress>,
+}
+
+/// Result of uploading a private archive to the network
+#[derive(uniffi::Record)]
+pub struct PrivateArchivePutResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The data map to retrieve the archive
+    pub data_map: Arc<DataMapChunk>,
+}
+
+/// Result of uploading a file to the network (private)
+#[derive(uniffi::Record)]
+pub struct FileUploadResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The data map to retrieve the file
+    pub data_map: Arc<DataMapChunk>,
+}
+
+/// Result of uploading a file to the network (public)
+#[derive(uniffi::Record)]
+pub struct FileUploadPublicResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The address where the file was stored
+    pub address: Arc<DataAddress>,
+}
+
+/// Result of uploading a directory to the network (private)
+#[derive(uniffi::Record)]
+pub struct DirUploadResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The data map to retrieve the directory archive
+    pub data_map: Arc<PrivateArchiveDataMap>,
+}
+
+/// Result of uploading directory content (without uploading archive)
+#[derive(uniffi::Record)]
+pub struct DirContentUploadResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The archive containing file references (not uploaded)
+    pub archive: Arc<PrivateArchive>,
+}
+
+/// Result of uploading a public directory to the network
+#[derive(uniffi::Record)]
+pub struct DirUploadPublicResult {
+    /// The cost paid for the upload in tokens
+    pub cost: String,
+    /// The address where the directory archive was stored
+    pub address: Arc<ArchiveAddress>,
 }
 
 /// Error type for Autonomi Client operations
@@ -461,6 +602,40 @@ impl Client {
         Ok(cost.to_string())
     }
 
+    /// Stream private data from the network.
+    /// Use this for large data to avoid loading everything into memory.
+    /// Returns a DataStream that can be used to read data in chunks.
+    pub async fn data_stream(
+        &self,
+        data_map: Arc<DataMapChunk>,
+    ) -> Result<Arc<DataStream>, ClientError> {
+        let stream = self.inner.data_stream(&data_map.inner).await.map_err(|e| {
+            ClientError::NetworkError {
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(streaming::DataStream::new(stream))
+    }
+
+    /// Stream public data from the network.
+    /// Use this for large data to avoid loading everything into memory.
+    /// Returns a DataStream that can be used to read data in chunks.
+    pub async fn data_stream_public(
+        &self,
+        address: Arc<DataAddress>,
+    ) -> Result<Arc<DataStream>, ClientError> {
+        let stream = self
+            .inner
+            .data_stream_public(&address.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(streaming::DataStream::new(stream))
+    }
+
     /// Get a pointer from the network by its address
     pub async fn pointer_get(
         &self,
@@ -577,6 +752,22 @@ impl Client {
                 })?;
 
         Ok(cost.to_string())
+    }
+
+    /// Check if a pointer exists on the network without fetching it
+    pub async fn pointer_check_existence(
+        &self,
+        addr: Arc<PointerAddress>,
+    ) -> Result<bool, ClientError> {
+        let exists = self
+            .inner
+            .pointer_check_existence(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(exists)
     }
 
     /// Get a scratchpad from the network by its address
@@ -745,6 +936,284 @@ impl Client {
         Ok(cost.to_string())
     }
 
+    /// Check if a scratchpad exists on the network without fetching it
+    pub async fn scratchpad_check_existence(
+        &self,
+        addr: Arc<ScratchpadAddress>,
+    ) -> Result<bool, ClientError> {
+        let exists = self
+            .inner
+            .scratchpad_check_existence(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(exists)
+    }
+
+    // ===== Register Methods =====
+
+    /// Create a new register on the network with an initial value
+    ///
+    /// Registers are mutable versioned storage that can be updated over time.
+    /// Returns the cost and address of the created register.
+    pub async fn register_create(
+        &self,
+        owner: Arc<SecretKey>,
+        value: Vec<u8>,
+        payment: PaymentOption,
+    ) -> Result<RegisterCreateResult, ClientError> {
+        // Convert value to fixed size array (registers store [u8; 32])
+        if value.len() != 32 {
+            return Err(ClientError::NetworkError {
+                reason: format!(
+                    "Register value must be exactly 32 bytes, got {}",
+                    value.len()
+                ),
+            });
+        }
+        let mut value_array = [0u8; 32];
+        value_array.copy_from_slice(&value);
+
+        // Convert payment option
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        // Create the register
+        let (cost, addr) = self
+            .inner
+            .register_create(&owner.inner, value_array, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(RegisterCreateResult {
+            cost: cost.to_string(),
+            address: Arc::new(RegisterAddress { inner: addr }),
+        })
+    }
+
+    /// Update an existing register with a new value
+    ///
+    /// Returns the cost of the update operation.
+    pub async fn register_update(
+        &self,
+        owner: Arc<SecretKey>,
+        value: Vec<u8>,
+        payment: PaymentOption,
+    ) -> Result<String, ClientError> {
+        // Convert value to fixed size array (registers store [u8; 32])
+        if value.len() != 32 {
+            return Err(ClientError::NetworkError {
+                reason: format!(
+                    "Register value must be exactly 32 bytes, got {}",
+                    value.len()
+                ),
+            });
+        }
+        let mut value_array = [0u8; 32];
+        value_array.copy_from_slice(&value);
+
+        // Convert payment option
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        // Update the register
+        let cost = self
+            .inner
+            .register_update(&owner.inner, value_array, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Get the current value of a register
+    ///
+    /// Returns the 32-byte register value.
+    pub async fn register_get(
+        &self,
+        address: Arc<RegisterAddress>,
+    ) -> Result<Vec<u8>, ClientError> {
+        let value = self.inner.register_get(&address.inner).await.map_err(|e| {
+            ClientError::NetworkError {
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(value.to_vec())
+    }
+
+    /// Get the cost to create a register for a specific owner
+    ///
+    /// Returns the estimated cost as a string.
+    pub async fn register_cost(&self, owner: Arc<PublicKey>) -> Result<String, ClientError> {
+        let cost = self.inner.register_cost(&owner.inner).await.map_err(|e| {
+            ClientError::NetworkError {
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Get the complete history of a register, from root to latest entry.
+    ///
+    /// Returns a list of 32-byte register values in chronological order.
+    pub async fn register_history_collect(
+        &self,
+        address: Arc<RegisterAddress>,
+    ) -> Result<Vec<Vec<u8>>, ClientError> {
+        let mut history = self.inner.register_history(&address.inner);
+        let values = history
+            .collect()
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(values.into_iter().map(|v| v.to_vec()).collect())
+    }
+
+    // ===== Vault Methods =====
+    //
+    // ❌ MISSING Vault APIs (Future Work):
+    // - UserData mutation: add_file_archive, add_private_file_archive, remove_file_archive
+
+    /// Get the cost to create a vault with the given maximum expected size
+    ///
+    /// # Arguments
+    /// * `key` - The vault secret key
+    /// * `max_expected_size` - Maximum expected size in bytes
+    pub async fn vault_cost(
+        &self,
+        key: Arc<VaultSecretKey>,
+        max_expected_size: u64,
+    ) -> Result<String, ClientError> {
+        let cost = self
+            .inner
+            .vault_cost(&key.inner, max_expected_size)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Put data into a vault
+    ///
+    /// Dynamically expands vault capacity by paying for more space when needed.
+    /// It is recommended to use the hash of the app name or unique identifier as the content type.
+    ///
+    /// # Arguments
+    /// * `data` - The data to store
+    /// * `payment` - Payment option
+    /// * `key` - The vault secret key
+    /// * `content_type` - Application-specific content type identifier
+    ///
+    /// Returns the cost of the operation.
+    pub async fn vault_put(
+        &self,
+        data: Vec<u8>,
+        payment: PaymentOption,
+        key: Arc<VaultSecretKey>,
+        content_type: u64,
+    ) -> Result<String, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let cost = self
+            .inner
+            .vault_put(
+                Bytes::from(data),
+                autonomi_payment,
+                &key.inner,
+                content_type,
+            )
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Fetch and decrypt vault data
+    ///
+    /// Returns the decrypted data and its content type.
+    pub async fn vault_get(&self, key: Arc<VaultSecretKey>) -> Result<VaultGetResult, ClientError> {
+        let (data, content_type) =
+            self.inner
+                .vault_get(&key.inner)
+                .await
+                .map_err(|e| ClientError::NetworkError {
+                    reason: e.to_string(),
+                })?;
+
+        Ok(VaultGetResult {
+            data: data.to_vec(),
+            content_type,
+        })
+    }
+
+    /// Get user data from a vault
+    ///
+    /// Returns the UserData containing references to file archives.
+    pub async fn vault_get_user_data(
+        &self,
+        key: Arc<VaultSecretKey>,
+    ) -> Result<Arc<UserData>, ClientError> {
+        let user_data = self
+            .inner
+            .vault_get_user_data(&key.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(UserData { inner: user_data }))
+    }
+
+    /// Put user data to a vault
+    ///
+    /// Returns the cost of the operation.
+    pub async fn vault_put_user_data(
+        &self,
+        key: Arc<VaultSecretKey>,
+        payment: PaymentOption,
+        user_data: Arc<UserData>,
+    ) -> Result<String, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let cost = self
+            .inner
+            .vault_put_user_data(&key.inner, autonomi_payment, user_data.inner.clone())
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
     // ===== GraphEntry Methods =====
 
     /// Fetch a graph entry from the network
@@ -812,6 +1281,326 @@ impl Client {
         })?;
 
         Ok(cost.to_string())
+    }
+
+    // ===== Archive Methods =====
+
+    /// Get the cost of storing an archive on the network
+    pub async fn archive_cost(&self, archive: Arc<PublicArchive>) -> Result<String, ClientError> {
+        let cost = self.inner.archive_cost(&archive.inner).await.map_err(|e| {
+            ClientError::NetworkError {
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Fetch a public archive from the network
+    pub async fn archive_get_public(
+        &self,
+        address: Arc<ArchiveAddress>,
+    ) -> Result<Arc<PublicArchive>, ClientError> {
+        let archive = self
+            .inner
+            .archive_get_public(&address.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(PublicArchive { inner: archive }))
+    }
+
+    /// Upload a public archive to the network
+    pub async fn archive_put_public(
+        &self,
+        archive: Arc<PublicArchive>,
+        payment: PaymentOption,
+    ) -> Result<PublicArchivePutResult, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .archive_put_public(&archive.inner, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(PublicArchivePutResult {
+            cost: cost.to_string(),
+            address: Arc::new(ArchiveAddress { inner: addr }),
+        })
+    }
+
+    /// Fetch a private archive from the network using its datamap
+    pub async fn archive_get(
+        &self,
+        data_map: Arc<DataMapChunk>,
+    ) -> Result<Arc<PrivateArchive>, ClientError> {
+        let archive = self.inner.archive_get(&data_map.inner).await.map_err(|e| {
+            ClientError::NetworkError {
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(Arc::new(PrivateArchive { inner: archive }))
+    }
+
+    /// Upload a private archive to the network
+    pub async fn archive_put(
+        &self,
+        archive: Arc<PrivateArchive>,
+        payment: PaymentOption,
+    ) -> Result<PrivateArchivePutResult, ClientError> {
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, data_map) = self
+            .inner
+            .archive_put(&archive.inner, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(PrivateArchivePutResult {
+            cost: cost.to_string(),
+            data_map: Arc::new(DataMapChunk { inner: data_map }),
+        })
+    }
+
+    // ===== File Operations =====
+
+    /// Get the cost to upload a file to the network
+    pub async fn file_cost(&self, path: String) -> Result<String, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let cost = self
+            .inner
+            .file_cost(&path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    }
+
+    /// Upload a private file to the network
+    /// Returns the DataMapChunk needed to retrieve the file
+    pub async fn file_upload(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<FileUploadResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, data_map) = self
+            .inner
+            .file_content_upload(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(FileUploadResult {
+            cost: cost.to_string(),
+            data_map: Arc::new(DataMapChunk { inner: data_map }),
+        })
+    }
+
+    /// Upload a public file to the network
+    /// Returns the DataAddress where the file is stored
+    pub async fn file_upload_public(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<FileUploadPublicResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .file_content_upload_public(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(FileUploadPublicResult {
+            cost: cost.to_string(),
+            address: Arc::new(DataAddress { inner: addr }),
+        })
+    }
+
+    /// Download a private file from the network to a local path
+    pub async fn file_download(
+        &self,
+        data_map: Arc<DataMapChunk>,
+        path: String,
+    ) -> Result<(), ClientError> {
+        let path = std::path::PathBuf::from(path);
+        self.inner
+            .file_download(&data_map.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    /// Download a public file from the network to a local path
+    pub async fn file_download_public(
+        &self,
+        address: Arc<DataAddress>,
+        path: String,
+    ) -> Result<(), ClientError> {
+        let path = std::path::PathBuf::from(path);
+        self.inner
+            .file_download_public(&address.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    // ===== Directory Operations =====
+
+    /// Upload a directory to the network as a private archive
+    /// Returns the PrivateArchiveDataMap needed to retrieve the directory
+    pub async fn dir_upload(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<DirUploadResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, data_map) = self
+            .inner
+            .dir_upload(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(DirUploadResult {
+            cost: cost.to_string(),
+            data_map: Arc::new(PrivateArchiveDataMap { inner: data_map }),
+        })
+    }
+
+    /// Upload directory content without uploading the archive itself
+    /// Returns a PrivateArchive containing references to the uploaded files
+    pub async fn dir_content_upload(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<DirContentUploadResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, archive) = self
+            .inner
+            .dir_content_upload(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(DirContentUploadResult {
+            cost: cost.to_string(),
+            archive: Arc::new(PrivateArchive { inner: archive }),
+        })
+    }
+
+    /// Upload a directory as a public archive to the network
+    pub async fn dir_upload_public(
+        &self,
+        path: String,
+        payment: PaymentOption,
+    ) -> Result<DirUploadPublicResult, ClientError> {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = match payment {
+            PaymentOption::WalletPayment { wallet_ref } => {
+                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
+            }
+        };
+
+        let (cost, addr) = self
+            .inner
+            .dir_upload_public(path, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(DirUploadPublicResult {
+            cost: cost.to_string(),
+            address: Arc::new(ArchiveAddress { inner: addr }),
+        })
+    }
+
+    /// Download a private directory from the network to a local path
+    pub async fn dir_download(
+        &self,
+        data_map: Arc<PrivateArchiveDataMap>,
+        path: String,
+    ) -> Result<(), ClientError> {
+        let path = std::path::PathBuf::from(path);
+        self.inner
+            .dir_download(&data_map.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    /// Download a public directory from the network to a local path
+    pub async fn dir_download_public(
+        &self,
+        address: Arc<ArchiveAddress>,
+        path: String,
+    ) -> Result<(), ClientError> {
+        let path = std::path::PathBuf::from(path);
+        self.inner
+            .dir_download_public(&address.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
     }
 }
 
