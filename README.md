@@ -137,6 +137,8 @@ print("Downloaded: \(String(data: downloaded, encoding: .utf8)!)")
 
 For usage examples, see the test files in [`apple/Tests/AutonomiTests/`](apple/Tests/AutonomiTests/).
 
+For a complete example app, see the **[iOS Example Project](examples/ios/)**.
+
 ## C/C++
 
 A C-compatible API is available for integration with C, C++, and any language that supports C FFI.
