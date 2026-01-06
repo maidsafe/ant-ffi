@@ -1,8 +1,14 @@
 # Autonomi FFI Bindings
 
-Android and iOS bindings for the Autonomi network.
+Multi-platform bindings for the Autonomi network.
 
 [![JitPack](https://jitpack.io/v/maidsafe/ant-ffi.svg)](https://jitpack.io/#maidsafe/ant-ffi)
+
+| Platform | Language | Status |
+|----------|----------|--------|
+| Android | Kotlin/Java | Stable |
+| iOS/macOS | Swift | Stable |
+| C/C++ | C | Available |
 
 ## Android
 
@@ -130,6 +136,36 @@ print("Downloaded: \(String(data: downloaded, encoding: .utf8)!)")
 ### Usage Examples
 
 For usage examples, see the test files in [`apple/Tests/AutonomiTests/`](apple/Tests/AutonomiTests/).
+
+## C/C++
+
+A C-compatible API is available for integration with C, C++, and any language that supports C FFI.
+
+### Quick Start
+
+```c
+#include "ant_ffiFFI.h"
+
+int main() {
+    RustCallStatus status = {0};
+
+    // Encrypt data
+    const char *message = "Hello, Autonomi!";
+    ForeignBytes input = { .len = strlen(message), .data = (const uint8_t *)message };
+    RustBuffer input_buffer = ffi_ant_ffi_rustbuffer_from_bytes(input, &status);
+
+    RustBuffer encrypted = uniffi_ant_ffi_fn_func_encrypt(input_buffer, &status);
+    RustBuffer decrypted = uniffi_ant_ffi_fn_func_decrypt(encrypted, &status);
+
+    printf("Decrypted: %.*s\n", (int)decrypted.len, decrypted.data);
+
+    // Cleanup
+    ffi_ant_ffi_rustbuffer_free(decrypted, &status);
+    return 0;
+}
+```
+
+For full documentation including async operations, memory management, and build instructions, see **[C API Documentation](docs/C_API.md)**.
 
 ## Available APIs
 
