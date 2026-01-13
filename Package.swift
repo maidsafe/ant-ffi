@@ -4,8 +4,8 @@
 import PackageDescription
 
 // Release configuration - updated automatically by CI on release
-let releaseTag = "v0.0.15"
-let releaseChecksum = "061a7168ad3f4591cc8e0d8373c97a2aff56085a533813dccbd75e039ca3273f"
+let releaseTag = "0.0.16"
+let releaseChecksum = "bc5eb0c2fd4fbd8c712b14bf7f4374ba51e72a301de73c8ca4928e89bc522435"
 
 // Use remote binary for releases, local path for development
 let binaryTarget: Target
