@@ -10,12 +10,26 @@ The Autonomi FFI bindings include a C-compatible API that can be used from any l
 
 The C API is automatically generated as part of the Swift bindings generation process. UniFFI produces a C header file (`ant_ffiFFI.h`) that declares all the FFI functions and types needed to interact with the Autonomi library.
 
-## Generating the C Header
+## Building from Source
 
 ### Prerequisites
 
-- Rust toolchain (stable)
-- The ant-ffi library built
+**Rust toolchain:**
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+**Protobuf compiler** (required by dependencies):
+```bash
+# macOS
+brew install protobuf
+
+# Debian/Ubuntu
+sudo apt install protobuf-compiler
+
+# Fedora
+sudo dnf install protobuf-compiler
+```
 
 ### Build Steps
 
@@ -24,7 +38,7 @@ The C API is automatically generated as part of the Swift bindings generation pr
 git clone https://github.com/maidsafe/ant-ffi.git
 cd ant-ffi/rust
 
-# Build the library (release mode recommended)
+# Build the library
 cargo build --release -p ant-ffi
 
 # Generate the C header
@@ -36,13 +50,16 @@ cargo run -p uniffi-bindgen-swift -- \
     --module-name ant_ffiFFI
 ```
 
-This produces:
-- `output/ant_ffiFFI.h` - The C header file
-- `output/ant_ffi.modulemap` - Swift module map (can be ignored for C usage)
+### Build Artifacts
 
-## Library Files
+After building, copy these files to your project:
 
-The build produces platform-specific library files:
+| File | Location | Description |
+|------|----------|-------------|
+| `libant_ffi.a` | `rust/target/release/` | Static library |
+| `ant_ffiFFI.h` | `rust/output/` | C header file |
+
+Platform-specific library variants:
 
 | Platform | Static Library | Dynamic Library |
 |----------|----------------|-----------------|
@@ -50,7 +67,57 @@ The build produces platform-specific library files:
 | macOS | `libant_ffi.a` | `libant_ffi.dylib` |
 | Windows | `ant_ffi.lib` | `ant_ffi.dll` |
 
-Location: `rust/target/release/`
+## Integrating into Your Project
+
+### Project Structure
+
+```
+your_project/
+├── include/
+│   └── ant_ffiFFI.h
+├── lib/
+│   └── libant_ffi.a
+└── src/
+    └── main.c
+```
+
+### Compiling
+
+**Linux:**
+```bash
+gcc -o myapp src/main.c -Iinclude -Llib -lant_ffi -lpthread -ldl -lm
+```
+
+**macOS:**
+```bash
+clang -o myapp src/main.c -Iinclude -Llib -lant_ffi \
+    -framework Security -framework SystemConfiguration -framework CoreFoundation \
+    -liconv -lresolv
+```
+
+### CMake Example
+
+```cmake
+cmake_minimum_required(VERSION 3.10)
+project(myapp)
+
+add_executable(myapp src/main.c)
+target_include_directories(myapp PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+# Link the library (adjust for your platform)
+if(APPLE)
+    target_link_libraries(myapp
+        ${CMAKE_SOURCE_DIR}/lib/libant_ffi.a
+        "-framework Security"
+        "-framework SystemConfiguration"
+        "-framework CoreFoundation"
+        iconv resolv)
+else()
+    target_link_libraries(myapp
+        ${CMAKE_SOURCE_DIR}/lib/libant_ffi.a
+        pthread dl m)
+endif()
+```
 
 ## Core Types
 
@@ -205,33 +272,6 @@ void *cloned = uniffi_ant_ffi_fn_clone_client(client_ptr, &status);
 
 // Free an object (decrement reference)
 uniffi_ant_ffi_fn_free_client(client_ptr, &status);
-```
-
-## Linking
-
-### Linux/macOS
-
-```bash
-# Static linking
-gcc -o myapp myapp.c -L/path/to/lib -lant_ffi -lpthread -ldl -lm
-
-# Dynamic linking
-gcc -o myapp myapp.c -L/path/to/lib -lant_ffi -Wl,-rpath,/path/to/lib
-```
-
-### CMake Example
-
-```cmake
-cmake_minimum_required(VERSION 3.10)
-project(myapp)
-
-add_executable(myapp main.c)
-
-# Include the header
-target_include_directories(myapp PRIVATE /path/to/ant_ffiFFI.h)
-
-# Link the library
-target_link_libraries(myapp /path/to/libant_ffi.a pthread dl m)
 ```
 
 ## Available Functions
