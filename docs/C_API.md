@@ -2,6 +2,10 @@
 
 The Autonomi FFI bindings include a C-compatible API that can be used from any language that supports C FFI (C, C++, Go, etc.).
 
+> **Note**: This is a low-level API generated directly from UniFFI bindings. It requires manual serialization/deserialization and careful memory management. For a more ergonomic experience, consider using the Swift or Kotlin bindings, or building a higher-level C wrapper for your use case.
+
+> **Quick Start**: See working examples in [`examples/c/`](../examples/c/) with a Makefile for easy building.
+
 ## Overview
 
 The C API is automatically generated as part of the Swift bindings generation process. UniFFI produces a C header file (`ant_ffiFFI.h`) that declares all the FFI functions and types needed to interact with the Autonomi library.
@@ -258,46 +262,66 @@ target_link_libraries(myapp /path/to/libant_ffi.a pthread dl m)
 
 For a complete list of functions, see the generated `ant_ffiFFI.h` header file.
 
-## Example: Simple Encryption
+## UniFFI Serialization Format
+
+**Important**: UniFFI uses a specific serialization format for data types. For `Vec<u8>` (byte arrays), data must be serialized as:
+- 4-byte **big-endian** length prefix
+- Followed by raw bytes
+
+```c
+// Serialize bytes for UniFFI
+size_t len = strlen(data);
+uint8_t *buf = malloc(4 + len);
+buf[0] = (len >> 24) & 0xFF;  // Big-endian length
+buf[1] = (len >> 16) & 0xFF;
+buf[2] = (len >> 8) & 0xFF;
+buf[3] = len & 0xFF;
+memcpy(buf + 4, data, len);
+
+ForeignBytes fb = { .len = 4 + len, .data = buf };
+RustBuffer input = ffi_ant_ffi_rustbuffer_from_bytes(fb, &status);
+free(buf);
+```
+
+When reading results, skip the 4-byte length prefix to get the actual data.
+
+## Example: Self-Encryption
+
+> **See also**: [`examples/c/self_encryption.c`](../examples/c/self_encryption.c) for a complete working example with Makefile.
 
 ```c
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "ant_ffiFFI.h"
 
 int main() {
     RustCallStatus status = {0};
+    const char *msg = "Hello from C! This is a test of self-encryption.";
+    size_t len = strlen(msg);
 
-    // Prepare data to encrypt
-    const char *message = "Hello, Autonomi!";
-    ForeignBytes input = {
-        .len = strlen(message),
-        .data = (const uint8_t *)message
-    };
-    RustBuffer input_buffer = ffi_ant_ffi_rustbuffer_from_bytes(input, &status);
+    // Serialize: 4-byte big-endian length + data (UniFFI format)
+    uint8_t *buf = malloc(4 + len);
+    buf[0] = buf[1] = buf[2] = 0; buf[3] = (uint8_t)len;
+    memcpy(buf + 4, msg, len);
+    ForeignBytes fb = { .len = 4 + len, .data = buf };
+    RustBuffer input = ffi_ant_ffi_rustbuffer_from_bytes(fb, &status);
+    free(buf);
 
-    // Encrypt
-    RustBuffer encrypted = uniffi_ant_ffi_fn_func_encrypt(input_buffer, &status);
-    if (status.code != 0) {
-        printf("Encryption failed\n");
-        return 1;
-    }
+    // Encrypt -> Decrypt
+    RustBuffer enc = uniffi_ant_ffi_fn_func_encrypt(input, &status);
+    if (status.code) { printf("Encrypt failed\n"); return 1; }
 
-    // Decrypt
-    RustBuffer decrypted = uniffi_ant_ffi_fn_func_decrypt(encrypted, &status);
-    if (status.code != 0) {
-        printf("Decryption failed\n");
-        return 1;
-    }
+    status = (RustCallStatus){0};
+    RustBuffer dec = uniffi_ant_ffi_fn_func_decrypt(enc, &status);
+    if (status.code) { printf("Decrypt failed\n"); return 1; }
 
-    printf("Decrypted: %.*s\n", (int)decrypted.len, decrypted.data);
+    // Verify (skip 4-byte length prefix)
+    int ok = (dec.data[3] == len && memcmp(dec.data + 4, msg, len) == 0);
+    printf("Original:  %s\nDecrypted: %.*s\n%s\n", msg, (int)len, dec.data + 4, ok ? "SUCCESS!" : "FAILED!");
 
-    // Cleanup
-    ffi_ant_ffi_rustbuffer_free(input_buffer, &status);
-    ffi_ant_ffi_rustbuffer_free(encrypted, &status);
-    ffi_ant_ffi_rustbuffer_free(decrypted, &status);
-
-    return 0;
+    ffi_ant_ffi_rustbuffer_free(dec, &status);
+    return !ok;
 }
 ```
 
