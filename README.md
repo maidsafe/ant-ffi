@@ -8,6 +8,7 @@ Multi-platform bindings for the Autonomi network.
 |----------|----------|--------|
 | Android | Kotlin/Java | Stable |
 | iOS/macOS | Swift | Stable |
+| C#/.NET | C# | Available |
 | C/C++ | C | Available |
 
 ## Android
@@ -138,6 +139,53 @@ print("Downloaded: \(String(data: downloaded, encoding: .utf8)!)")
 For usage examples, see the test files in [`apple/Tests/AutonomiTests/`](apple/Tests/AutonomiTests/).
 
 For a complete example app, see the **[iOS Example Project](examples/ios/)**.
+
+## C# / .NET
+
+C# bindings for the Autonomi network, targeting .NET 8.0+.
+
+### Prerequisites
+
+- .NET 8.0 SDK or later
+- The native `ant_ffi` shared library for your platform (place it alongside your application binary)
+
+### Quick Start
+
+```csharp
+using AntFfi;
+
+// Encrypt and decrypt data locally
+var encrypted = SelfEncryption.Encrypt("Hello, Autonomi!");
+var decrypted = SelfEncryption.DecryptToString(encrypted);
+Console.WriteLine(decrypted); // "Hello, Autonomi!"
+
+// Initialize client (when network is available)
+using var network = Network.Create(isLocal: true);
+using var client = await Client.InitAsync(network);
+
+// Create a wallet
+using var wallet = Wallet.FromPrivateKey(network, "your-private-key");
+
+// Upload data
+var data = System.Text.Encoding.UTF8.GetBytes("Hello Autonomi!");
+var address = await client.DataPutPublicAsync(data, wallet);
+Console.WriteLine($"Uploaded to: {address.ToHex()}");
+
+// Download data
+var downloaded = await client.DataGetPublicAsync(address);
+Console.WriteLine($"Downloaded: {System.Text.Encoding.UTF8.GetString(downloaded)}");
+```
+
+### Usage Examples
+
+For comprehensive usage examples, see the test files in [`csharp/AntFfi.Tests/`](csharp/AntFfi.Tests/):
+
+| Test File | Features Covered |
+|-----------|------------------|
+| `ClientTests.cs` | Client init, data upload/download, file operations, pointers |
+| `DataTypeTests.cs` | Data types, chunk constants, address operations |
+| `KeyTests.cs` | Secret keys, public keys, main secret keys, key derivation |
+| `SelfEncryptionTests.cs` | Self-encryption, decryption, string round-trips |
 
 ## C/C++
 

@@ -81,3 +81,10 @@ xcuserdata/
 
 # Android (cargo-ndk outputs; they end up in the Android source tree)
 *.so
+
+# C# / .NET
+**/bin/
+**/obj/
+**/TestResults/
+*.user
+*.suo
