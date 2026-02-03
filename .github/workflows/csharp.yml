@@ -1,0 +1,52 @@
+name: C# CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-csharp-build
+      cancel-in-progress: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Cargo dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: rust
+
+    - name: Build Rust FFI library
+      run: cargo build --release
+      working-directory: rust
+
+    - name: Build C#
+      run: dotnet build
+      working-directory: csharp
+
+    - name: Run unit tests
+      run: dotnet test --filter "Category!=Integration" --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
+      working-directory: csharp
+      env:
+        LD_LIBRARY_PATH: ${{ github.workspace }}/rust/target/release
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: csharp-test-results
+        path: csharp/TestResults/
+        retention-days: 5
