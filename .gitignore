@@ -88,3 +88,9 @@ xcuserdata/
 **/TestResults/
 *.user
 *.suo
+
+# Lua FFI bindings
+lua/ant_ffi/*.dll
+lua/ant_ffi/*.so
+lua/ant_ffi/*.dylib
+lua/async_helper/target/
