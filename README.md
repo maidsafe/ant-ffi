@@ -9,6 +9,7 @@ Multi-platform bindings for the Autonomi network.
 | Android | Kotlin/Java | Stable |
 | iOS/macOS | Swift | Stable |
 | C#/.NET | C# | Available |
+| Lua | LuaJIT | Available |
 | C/C++ | C | Available |
 
 ## Android
@@ -186,6 +187,116 @@ For comprehensive usage examples, see the test files in [`csharp/AntFfi.Tests/`]
 | `DataTypeTests.cs` | Data types, chunk constants, address operations |
 | `KeyTests.cs` | Secret keys, public keys, main secret keys, key derivation |
 | `SelfEncryptionTests.cs` | Self-encryption, decryption, string round-trips |
+
+## Lua (LuaJIT)
+
+Lua bindings using LuaJIT FFI for the Autonomi network.
+
+### Prerequisites
+
+- **LuaJIT 2.1+** (or Lua 5.1+ with cffi-lua)
+- **Rust toolchain** (for building native libraries)
+- **C compiler** (GCC/MinGW on Windows, gcc/clang on Linux/macOS)
+
+### Building Native Libraries
+
+The Lua bindings require two native libraries:
+
+#### 1. Build `ant_ffi` (main library)
+
+```bash
+cd rust
+cargo build --release
+```
+
+This produces:
+- Windows: `rust/target/release/ant_ffi.dll`
+- Linux: `rust/target/release/libant_ffi.so`
+- macOS: `rust/target/release/libant_ffi.dylib`
+
+#### 2. Build `async_helper` (for async operations)
+
+**Option A: Using Rust (recommended)**
+```bash
+cd lua/async_helper
+cargo build --release
+```
+
+**Option B: Using C compiler**
+```bash
+cd lua/csrc
+# Windows (MinGW)
+gcc -shared -O2 -o async_helper.dll async_helper.c
+# Linux
+gcc -shared -O2 -fPIC -o libasync_helper.so async_helper.c
+# macOS
+gcc -shared -O2 -o libasync_helper.dylib async_helper.c
+```
+
+#### 3. Copy libraries to `lua/ant_ffi/`
+
+```bash
+# Windows
+copy rust\target\release\ant_ffi.dll lua\ant_ffi\
+copy lua\async_helper\target\release\async_helper.dll lua\ant_ffi\
+
+# Linux/macOS
+cp rust/target/release/libant_ffi.* lua/ant_ffi/
+cp lua/async_helper/target/release/libasync_helper.* lua/ant_ffi/
+```
+
+### Quick Start
+
+```lua
+local ant = require("ant_ffi")
+
+-- Encrypt and decrypt data locally
+local encrypted = ant.encrypt("Hello, Autonomi!")
+local decrypted = ant.decrypt(encrypted)
+print(decrypted)  -- "Hello, Autonomi!"
+
+-- Initialize client (when network is available)
+local client = ant.Client.init_local()
+
+-- Create a wallet
+local network = ant.Network.new(true)  -- true = local network
+local wallet = ant.Wallet.from_private_key(network, "your-private-key")
+
+-- Upload data
+local address, cost = client:data_put_public("Hello Autonomi!", wallet)
+print("Uploaded to: " .. address:to_hex())
+print("Cost: " .. cost)
+
+-- Download data
+local downloaded = client:data_get_public(address:to_hex())
+print("Downloaded: " .. downloaded)
+
+-- Cleanup
+wallet:dispose()
+client:dispose()
+```
+
+### Running Tests
+
+```bash
+cd lua
+luajit test/test_self_encryption.lua
+luajit test/test_keys.lua
+luajit test/test_all_types.lua
+luajit test/test_roundtrip.lua  # Requires running local network
+```
+
+### Usage Examples
+
+For comprehensive usage examples, see the test files in [`lua/test/`](lua/test/):
+
+| Test File | Features Covered |
+|-----------|------------------|
+| `test_self_encryption.lua` | Self-encryption, decryption |
+| `test_keys.lua` | Secret keys, public keys, key derivation |
+| `test_data.lua` | Chunks, addresses, data map chunks |
+| `test_all_types.lua` | All data types and operations |
+| `test_roundtrip.lua` | Full integration test with network |
 
 ## C/C++
 
