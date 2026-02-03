@@ -81,3 +81,10 @@ xcuserdata/
 
 # Android (cargo-ndk outputs; they end up in the Android source tree)
 *.so
+
+# Claude Code
+.claude/
+
+# Windows NUL device artifacts
+nul
+**/nul
