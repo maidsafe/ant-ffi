@@ -1,0 +1,76 @@
+name: Lua CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-lua-build
+      cancel-in-progress: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup LuaJIT
+      uses: leafo/gh-actions-lua@v10
+      with:
+        luaVersion: "luajit-2.1"
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Cargo dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: |
+          rust
+          lua/async_helper
+
+    - name: Build Rust FFI library
+      run: cargo build --release
+      working-directory: rust
+
+    - name: Build async_helper library
+      run: cargo build --release
+      working-directory: lua/async_helper
+
+    - name: Copy libraries to lua/ant_ffi
+      run: |
+        cp rust/target/release/libant_ffi.so lua/ant_ffi/
+        cp lua/async_helper/target/release/libasync_helper.so lua/ant_ffi/
+        ls -la lua/ant_ffi/
+
+    - name: Run self-encryption tests
+      run: luajit test/test_self_encryption.lua
+      working-directory: lua
+      env:
+        LD_LIBRARY_PATH: ${{ github.workspace }}/lua/ant_ffi
+
+    - name: Run key tests
+      run: luajit test/test_keys.lua
+      working-directory: lua
+      env:
+        LD_LIBRARY_PATH: ${{ github.workspace }}/lua/ant_ffi
+
+    - name: Run data type tests
+      run: luajit test/test_data.lua
+      working-directory: lua
+      env:
+        LD_LIBRARY_PATH: ${{ github.workspace }}/lua/ant_ffi
+
+    - name: Run all types tests
+      run: luajit test/test_all_types.lua
+      working-directory: lua
+      env:
+        LD_LIBRARY_PATH: ${{ github.workspace }}/lua/ant_ffi
+
+    - name: Run async helper tests
+      run: luajit test/test_async_helper.lua
+      working-directory: lua
+      env:
+        LD_LIBRARY_PATH: ${{ github.workspace }}/lua/ant_ffi
