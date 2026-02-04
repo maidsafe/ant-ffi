@@ -8,6 +8,7 @@ Multi-platform bindings for the Autonomi network.
 |----------|----------|--------|
 | Android | Kotlin/Java | Stable |
 | iOS/macOS | Swift | Stable |
+| PHP | PHP 8.1+ | Available |
 | C/C++ | C | Available |
 
 ## Android
@@ -138,6 +139,122 @@ print("Downloaded: \(String(data: downloaded, encoding: .utf8)!)")
 For usage examples, see the test files in [`apple/Tests/AutonomiTests/`](apple/Tests/AutonomiTests/).
 
 For a complete example app, see the **[iOS Example Project](examples/ios/)**.
+
+## PHP
+
+PHP bindings using PHP's native FFI extension (PHP 7.4+) with ReactPHP for async operations.
+
+### Prerequisites
+
+- **PHP 8.1+** with FFI extension enabled
+- **Composer** for dependency management
+- **Rust toolchain** (for building native libraries)
+
+### Building Native Libraries
+
+```bash
+# Build the Rust FFI library
+cd rust
+cargo build --release
+```
+
+Copy the native library to the PHP package directory:
+
+```bash
+# Windows
+copy rust\target\release\ant_ffi.dll php\ant_ffi\
+
+# Linux
+cp rust/target/release/libant_ffi.so php/ant_ffi/
+
+# macOS
+cp rust/target/release/libant_ffi.dylib php/ant_ffi/
+```
+
+### Installation
+
+```bash
+cd php/ant_ffi
+composer install
+```
+
+### Quick Start
+
+```php
+<?php
+require_once 'vendor/autoload.php';
+
+use AntFfi\SelfEncryption;
+use AntFfi\Types\{SecretKey, Network, Wallet, Client};
+
+// Encrypt and decrypt data locally
+$encrypted = SelfEncryption::encrypt('Hello, Autonomi!');
+$decrypted = SelfEncryption::decrypt($encrypted);
+echo $decrypted . "\n"; // 'Hello, Autonomi!'
+
+// Generate keys
+$secretKey = SecretKey::random();
+$publicKey = $secretKey->publicKey();
+echo "Public key: " . $publicKey->toHex() . "\n";
+
+// Sync network operations (blocking)
+$client = Client::initLocalSync();
+$network = Network::local();
+$wallet = Wallet::fromPrivateKey($network, $privateKey);
+
+$result = $client->dataPutPublicSync('Hello Autonomi!', $wallet);
+echo "Uploaded to: " . $result->address->toHex() . "\n";
+
+$downloaded = $client->dataGetPublicSync($result->address->toHex());
+echo "Downloaded: " . $downloaded . "\n";
+
+// Cleanup
+$wallet->dispose();
+$client->dispose();
+```
+
+### Async Operations with ReactPHP
+
+```php
+<?php
+use function React\Async\await;
+
+// Using promises
+Client::initLocal()->then(function ($client) use ($wallet) {
+    return $client->dataPutPublic('Hello!', $wallet);
+})->then(function ($result) {
+    echo "Uploaded to: " . $result->address->toHex() . "\n";
+});
+
+// Or using await() for sync-style async code
+$client = await(Client::initLocal());
+$result = await($client->dataPutPublic('Hello!', $wallet));
+$data = await($client->dataGetPublic($result->address->toHex()));
+```
+
+### Running Tests
+
+```bash
+cd php/ant_ffi
+
+# Run unit tests
+vendor/bin/phpunit --testsuite Unit
+
+# Run integration tests (requires running local network)
+vendor/bin/phpunit --testsuite Integration
+```
+
+### Usage Examples
+
+For comprehensive usage examples, see the test files in [`php/ant_ffi/tests/`](php/ant_ffi/tests/):
+
+| Test File | Features Covered |
+|-----------|------------------|
+| `SelfEncryptionTest.php` | Self-encryption, decryption |
+| `KeysTest.php` | Secret keys, public keys, key derivation |
+| `DataTypesTest.php` | Chunks, addresses, data operations |
+| `NetworkWalletTest.php` | Network configuration, wallet creation |
+| `RoundtripTest.php` | Full integration test with network |
 
 ## C/C++
 
