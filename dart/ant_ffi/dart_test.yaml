@@ -1,0 +1,9 @@
+# Dart test configuration
+# See: https://github.com/dart-lang/test/blob/master/pkgs/test/doc/configuration.md
+
+tags:
+  # E2E tests require a local Autonomi network and are excluded by default
+  e2e:
+    skip: "Requires local Autonomi network. Run manually with: dart test -t e2e"
+  integration:
+    skip: "Requires local Autonomi network. Run manually with: dart test -t integration"

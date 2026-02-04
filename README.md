@@ -10,6 +10,7 @@ Multi-platform bindings for the Autonomi network.
 | iOS/macOS | Swift | Stable |
 | C#/.NET | C# | Available |
 | Lua | LuaJIT | Available |
+| Dart/Flutter | Dart | Available |
 | C/C++ | C | Available |
 
 ## Android
@@ -297,6 +298,133 @@ For comprehensive usage examples, see the test files in [`lua/test/`](lua/test/)
 | `test_data.lua` | Chunks, addresses, data map chunks |
 | `test_all_types.lua` | All data types and operations |
 | `test_roundtrip.lua` | Full integration test with network |
+
+## Dart / Flutter
+
+Dart bindings using dart:ffi for the Autonomi network, with Flutter support.
+
+### Prerequisites
+
+- **Dart 3.0+** or **Flutter 3.10+**
+- **Rust toolchain** (for building native libraries)
+
+### Building Native Libraries
+
+```bash
+# Build the Rust FFI library
+cd rust
+cargo build --release
+
+# Generate the C header (needed for ffigen)
+cargo run -p uniffi-bindgen-swift -- \
+  --headers \
+  target/release/libant_ffi.so \  # or .dll on Windows, .dylib on macOS
+  ../dart/c_header \
+  --module-name ant_ffiFFI
+```
+
+Copy the native library to your project or ensure it's in the library path:
+- Windows: `ant_ffi.dll`
+- Linux: `libant_ffi.so`
+- macOS: `libant_ffi.dylib`
+
+### Regenerating Bindings
+
+When the Rust API changes, you need to regenerate the Dart FFI bindings. The process involves three steps:
+
+#### 1. Build the Rust library
+
+```bash
+cd rust
+cargo build --release
+```
+
+#### 2. Generate the C header
+
+The C header is generated from the Rust library using `uniffi-bindgen-swift`:
+
+```bash
+# From the rust directory
+cargo run -p uniffi-bindgen-swift -- \
+  --headers \
+  target/release/ant_ffi.dll \  # or libant_ffi.so on Linux, libant_ffi.dylib on macOS
+  ../dart/c_header \
+  --module-name ant_ffiFFI
+```
+
+This creates `dart/c_header/ant_ffiFFI.h`.
+
+#### 3. Regenerate Dart bindings with ffigen
+
+```bash
+cd dart/ant_ffi
+dart run ffigen
+```
+
+This reads `ffigen.yaml` and the C header to generate `lib/src/native/bindings.dart`.
+
+**Note:** The generated `bindings.dart` file is committed to the repository for convenience, but can always be regenerated using the steps above.
+
+### Quick Start
+
+```dart
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:ant_ffi/ant_ffi.dart';
+
+void main() {
+  // Encrypt and decrypt data locally
+  final data = Uint8List.fromList(utf8.encode('Hello, Autonomi!'));
+  final encrypted = encrypt(data);
+  final decrypted = decrypt(encrypted);
+  print(utf8.decode(decrypted)); // 'Hello, Autonomi!'
+
+  // Generate keys
+  final secretKey = SecretKey.random();
+  final publicKey = secretKey.publicKey();
+  print('Public key: ${publicKey.toHex()}');
+
+  // Work with chunks
+  final chunk = Chunk(data);
+  final address = chunk.address();
+  print('Chunk address: ${address.toHex()}');
+
+  // Cleanup - important for memory management!
+  secretKey.dispose();
+  publicKey.dispose();
+  chunk.dispose();
+  address.dispose();
+}
+```
+
+### Running Tests
+
+```bash
+cd dart/ant_ffi
+
+# Install dependencies and generate bindings
+dart pub get
+dart run ffigen
+
+# Run tests (requires native library in LD_LIBRARY_PATH)
+dart test
+```
+
+### Usage Examples
+
+For comprehensive usage examples, see the test files in [`dart/ant_ffi/test/`](dart/ant_ffi/test/):
+
+| Test File | Features Covered |
+|-----------|------------------|
+| `self_encryption_test.dart` | Self-encryption, decryption |
+| `keys_test.dart` | Secret keys, public keys, key derivation |
+| `data_types_test.dart` | Chunks, addresses, data operations |
+
+### Flutter Integration
+
+The same bindings work for Flutter apps. Add the native library to your platform-specific directories:
+- Android: `android/app/src/main/jniLibs/<arch>/libant_ffi.so`
+- iOS: Link as a static library or framework
 
 ## C/C++
 

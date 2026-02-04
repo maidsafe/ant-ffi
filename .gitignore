@@ -79,6 +79,9 @@ xcuserdata/
 # macOS Ignores
 .DS_Store
 
+# Claude Code local settings
+.claude/
+
 # Android (cargo-ndk outputs; they end up in the Android source tree)
 *.so
 
@@ -94,3 +97,12 @@ lua/ant_ffi/*.dll
 lua/ant_ffi/*.so
 lua/ant_ffi/*.dylib
 lua/async_helper/target/
+
+# Dart FFI bindings
+dart/ant_ffi/.dart_tool/
+dart/ant_ffi/.packages
+dart/ant_ffi/pubspec.lock
+dart/ant_ffi/*.dll
+dart/ant_ffi/*.so
+dart/ant_ffi/*.dylib
+dart/c_header/
