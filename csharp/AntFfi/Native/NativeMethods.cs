@@ -842,7 +842,7 @@ internal static partial class NativeMethods
     /// Async: Estimates the cost to upload a file to the network.
     /// </summary>
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uniffi_ant_ffi_fn_method_client_file_cost")]
-    public static extern ulong ClientFileCost(IntPtr ptr, RustBuffer filePath);
+    public static extern ulong ClientFileCost(IntPtr ptr, RustBuffer filePath, sbyte followSymlinks, sbyte includeHidden);
 
     #endregion
 
