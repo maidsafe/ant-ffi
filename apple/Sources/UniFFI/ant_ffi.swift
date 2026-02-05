@@ -399,6 +399,22 @@ fileprivate class UniffiHandleMap<T> {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
+    typealias FfiType = UInt64
+    typealias SwiftType = UInt64
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt64 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterBool : FfiConverter {
     typealias FfiType = Int8
     typealias SwiftType = Bool
@@ -483,9 +499,591 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 /**
+ * Address of a public archive on the network
+ */
+public protocol ArchiveAddressProtocol : AnyObject {
+    
+    /**
+     * Returns the hex string representation of this archive address
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * Address of a public archive on the network
+ */
+open class ArchiveAddress:
+    ArchiveAddressProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_archiveaddress(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_archiveaddress(pointer, $0) }
+    }
+
+    
+    /**
+     * Create an ArchiveAddress from a hex string
+     */
+public static func fromHex(hex: String)throws  -> ArchiveAddress {
+    return try  FfiConverterTypeArchiveAddress.lift(try rustCallWithError(FfiConverterTypeArchiveError.lift) {
+    uniffi_ant_ffi_fn_constructor_archiveaddress_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the hex string representation of this archive address
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_archiveaddress_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArchiveAddress: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = ArchiveAddress
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ArchiveAddress {
+        return ArchiveAddress(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: ArchiveAddress) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArchiveAddress {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: ArchiveAddress, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArchiveAddress_lift(_ pointer: UnsafeMutableRawPointer) throws -> ArchiveAddress {
+    return try FfiConverterTypeArchiveAddress.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeArchiveAddress_lower(_ value: ArchiveAddress) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeArchiveAddress.lower(value)
+}
+
+
+
+
+/**
+ * A chunk of data stored on the network.
+ * Chunks are content-addressable, meaning their address is derived from their content.
+ */
+public protocol ChunkProtocol : AnyObject {
+    
+    /**
+     * Returns the address of the chunk
+     */
+    func address()  -> ChunkAddress
+    
+    /**
+     * Returns true if the chunk is too big to store
+     */
+    func isTooBig()  -> Bool
+    
+    /**
+     * Returns the network address as a string
+     */
+    func networkAddress()  -> String
+    
+    /**
+     * Returns the size of this chunk after serialization
+     */
+    func size()  -> UInt64
+    
+    /**
+     * Returns the content of the chunk
+     */
+    func value()  -> Data
+    
+}
+
+/**
+ * A chunk of data stored on the network.
+ * Chunks are content-addressable, meaning their address is derived from their content.
+ */
+open class Chunk:
+    ChunkProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_chunk(self.pointer, $0) }
+    }
+    /**
+     * Creates a new chunk from raw data
+     */
+public convenience init(value: Data) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_chunk_new(
+        FfiConverterData.lower(value),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_chunk(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Returns the address of the chunk
+     */
+open func address() -> ChunkAddress {
+    return try!  FfiConverterTypeChunkAddress.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_chunk_address(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns true if the chunk is too big to store
+     */
+open func isTooBig() -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_chunk_is_too_big(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the network address as a string
+     */
+open func networkAddress() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_chunk_network_address(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the size of this chunk after serialization
+     */
+open func size() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_chunk_size(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the content of the chunk
+     */
+open func value() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_chunk_value(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChunk: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Chunk
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Chunk {
+        return Chunk(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Chunk) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Chunk {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Chunk, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChunk_lift(_ pointer: UnsafeMutableRawPointer) throws -> Chunk {
+    return try FfiConverterTypeChunk.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChunk_lower(_ value: Chunk) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeChunk.lower(value)
+}
+
+
+
+
+/**
+ * An address of a chunk of data on the network.
+ * Used to locate and retrieve data chunks.
+ */
+public protocol ChunkAddressProtocol : AnyObject {
+    
+    /**
+     * Returns the raw bytes of the address (32 bytes)
+     */
+    func toBytes()  -> Data
+    
+    /**
+     * Returns the hex string representation of the address
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * An address of a chunk of data on the network.
+ * Used to locate and retrieve data chunks.
+ */
+open class ChunkAddress:
+    ChunkAddressProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_chunkaddress(self.pointer, $0) }
+    }
+    /**
+     * Creates a new chunk address from raw bytes (32 bytes)
+     */
+public convenience init(bytes: Data)throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypeDataError.lift) {
+    uniffi_ant_ffi_fn_constructor_chunkaddress_new(
+        FfiConverterData.lower(bytes),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_chunkaddress(pointer, $0) }
+    }
+
+    
+    /**
+     * Generate a chunk address for the given content (content-addressable storage)
+     */
+public static func fromContent(data: Data) -> ChunkAddress {
+    return try!  FfiConverterTypeChunkAddress.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_chunkaddress_from_content(
+        FfiConverterData.lower(data),$0
+    )
+})
+}
+    
+    /**
+     * Create a ChunkAddress from a hex string
+     */
+public static func fromHex(hex: String)throws  -> ChunkAddress {
+    return try  FfiConverterTypeChunkAddress.lift(try rustCallWithError(FfiConverterTypeDataError.lift) {
+    uniffi_ant_ffi_fn_constructor_chunkaddress_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the raw bytes of the address (32 bytes)
+     */
+open func toBytes() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_chunkaddress_to_bytes(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the hex string representation of the address
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_chunkaddress_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChunkAddress: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = ChunkAddress
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ChunkAddress {
+        return ChunkAddress(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: ChunkAddress) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChunkAddress {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: ChunkAddress, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChunkAddress_lift(_ pointer: UnsafeMutableRawPointer) throws -> ChunkAddress {
+    return try FfiConverterTypeChunkAddress.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChunkAddress_lower(_ value: ChunkAddress) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeChunkAddress.lower(value)
+}
+
+
+
+
+/**
  * Autonomi network client
  */
 public protocol ClientProtocol : AnyObject {
+    
+    /**
+     * Get the cost of storing an archive on the network
+     */
+    func archiveCost(archive: PublicArchive) async throws  -> String
+    
+    /**
+     * Fetch a private archive from the network using its datamap
+     */
+    func archiveGet(dataMap: DataMapChunk) async throws  -> PrivateArchive
+    
+    /**
+     * Fetch a public archive from the network
+     */
+    func archiveGetPublic(address: ArchiveAddress) async throws  -> PublicArchive
+    
+    /**
+     * Upload a private archive to the network
+     */
+    func archivePut(archive: PrivateArchive, payment: PaymentOption) async throws  -> PrivateArchivePutResult
+    
+    /**
+     * Upload a public archive to the network
+     */
+    func archivePutPublic(archive: PublicArchive, payment: PaymentOption) async throws  -> PublicArchivePutResult
+    
+    /**
+     * Get the cost to store a chunk at a specific address
+     */
+    func chunkCost(addr: ChunkAddress) async throws  -> String
+    
+    /**
+     * Get a chunk from the network by its address
+     */
+    func chunkGet(addr: ChunkAddress) async throws  -> Data
+    
+    /**
+     * Manually upload a chunk to the network.
+     * It is recommended to use `data_put` for larger data as it handles encryption and chunking.
+     */
+    func chunkPut(data: Data, payment: PaymentOption) async throws  -> ChunkPutResult
+    
+    /**
+     * Get the estimated cost of storing private data
+     */
+    func dataCost(data: Data) async throws  -> String
+    
+    /**
+     * Fetch private data from the network using a DataMapChunk.
+     * The data is automatically decrypted and reassembled from chunks.
+     */
+    func dataGet(dataMap: DataMapChunk) async throws  -> Data
     
     /**
      * Fetch public data from the network using a hex-encoded data address
@@ -493,11 +1091,284 @@ public protocol ClientProtocol : AnyObject {
     func dataGetPublic(addressHex: String) async throws  -> Data
     
     /**
+     * Upload private data to the network with self-encryption.
+     * The data is encrypted and split into chunks automatically.
+     * The DataMapChunk contains the metadata needed to retrieve and decrypt the data.
+     */
+    func dataPut(data: Data, payment: PaymentOption) async throws  -> DataPutResult
+    
+    /**
      * Upload data to the network as public data
      *
      * Returns the upload result containing price and data address
      */
     func dataPutPublic(data: Data, payment: PaymentOption) async throws  -> UploadResult
+    
+    /**
+     * Stream private data from the network.
+     * Use this for large data to avoid loading everything into memory.
+     * Returns a DataStream that can be used to read data in chunks.
+     */
+    func dataStream(dataMap: DataMapChunk) async throws  -> DataStream
+    
+    /**
+     * Stream public data from the network.
+     * Use this for large data to avoid loading everything into memory.
+     * Returns a DataStream that can be used to read data in chunks.
+     */
+    func dataStreamPublic(address: DataAddress) async throws  -> DataStream
+    
+    /**
+     * Upload directory content without uploading the archive itself
+     * Returns a PrivateArchive containing references to the uploaded files
+     */
+    func dirContentUpload(path: String, payment: PaymentOption) async throws  -> DirContentUploadResult
+    
+    /**
+     * Download a private directory from the network to a local path
+     */
+    func dirDownload(dataMap: PrivateArchiveDataMap, path: String) async throws 
+    
+    /**
+     * Download a public directory from the network to a local path
+     */
+    func dirDownloadPublic(address: ArchiveAddress, path: String) async throws 
+    
+    /**
+     * Upload a directory to the network as a private archive
+     * Returns the PrivateArchiveDataMap needed to retrieve the directory
+     */
+    func dirUpload(path: String, wallet: Wallet) async throws  -> DirUploadResult
+    
+    /**
+     * Upload a directory as a public archive to the network
+     */
+    func dirUploadPublic(path: String, wallet: Wallet) async throws  -> DirUploadPublicResult
+    
+    /**
+     * Get the cost to upload a file to the network
+     *
+     * # Arguments
+     * * `path` - Path to the file
+     * * `follow_symlinks` - Whether to follow symbolic links
+     * * `include_hidden` - Whether to include hidden files
+     */
+    func fileCost(path: String, followSymlinks: Bool, includeHidden: Bool) async throws  -> String
+    
+    /**
+     * Download a private file from the network to a local path
+     */
+    func fileDownload(dataMap: DataMapChunk, path: String) async throws 
+    
+    /**
+     * Download a public file from the network to a local path
+     */
+    func fileDownloadPublic(address: DataAddress, path: String) async throws 
+    
+    /**
+     * Upload a private file to the network
+     * Returns the DataMapChunk needed to retrieve the file
+     */
+    func fileUpload(path: String, payment: PaymentOption) async throws  -> FileUploadResult
+    
+    /**
+     * Upload a public file to the network
+     * Returns the DataAddress where the file is stored
+     */
+    func fileUploadPublic(path: String, payment: PaymentOption) async throws  -> FileUploadPublicResult
+    
+    /**
+     * Check if a graph entry exists on the network
+     */
+    func graphEntryCheckExistence(addr: GraphEntryAddress) async throws  -> Bool
+    
+    /**
+     * Get the cost to create a graph entry for a given public key
+     */
+    func graphEntryCost(key: PublicKey) async throws  -> String
+    
+    /**
+     * Fetch a graph entry from the network
+     */
+    func graphEntryGet(addr: GraphEntryAddress) async throws  -> GraphEntry
+    
+    /**
+     * Put a graph entry to the network
+     */
+    func graphEntryPut(entry: GraphEntry, payment: PaymentOption) async throws  -> GraphEntryPutResult
+    
+    /**
+     * Check if a pointer exists on the network without fetching it
+     */
+    func pointerCheckExistence(addr: PointerAddress) async throws  -> Bool
+    
+    /**
+     * Get the cost of storing a pointer for a given public key
+     */
+    func pointerCost(key: PublicKey) async throws  -> String
+    
+    /**
+     * Create a new pointer on the network
+     * Make sure the owner key is not already used for another pointer
+     */
+    func pointerCreate(owner: SecretKey, target: PointerTarget, payment: PaymentOption) async throws  -> PointerCreateResult
+    
+    /**
+     * Get a pointer from the network by its address
+     */
+    func pointerGet(addr: PointerAddress) async throws  -> NetworkPointer
+    
+    /**
+     * Store a pointer on the network
+     * Returns the address where the pointer was stored
+     */
+    func pointerPut(pointer: NetworkPointer, payment: PaymentOption) async throws  -> PointerAddress
+    
+    /**
+     * Update an existing pointer to point to a new target
+     * This operation is free as the pointer was already paid for
+     * Only the latest version is kept, previous versions are overwritten
+     */
+    func pointerUpdate(owner: SecretKey, target: PointerTarget) async throws 
+    
+    /**
+     * Update a pointer from a specific current pointer
+     * Returns the new updated pointer
+     */
+    func pointerUpdateFrom(current: NetworkPointer, owner: SecretKey, target: PointerTarget) async throws  -> NetworkPointer
+    
+    /**
+     * Get the cost to create a register for a specific owner
+     *
+     * Returns the estimated cost as a string.
+     */
+    func registerCost(owner: PublicKey) async throws  -> String
+    
+    /**
+     * Create a new register on the network with an initial value
+     *
+     * Registers are mutable versioned storage that can be updated over time.
+     * Returns the cost and address of the created register.
+     */
+    func registerCreate(owner: SecretKey, value: Data, payment: PaymentOption) async throws  -> RegisterCreateResult
+    
+    /**
+     * Get the current value of a register
+     *
+     * Returns the 32-byte register value.
+     */
+    func registerGet(address: RegisterAddress) async throws  -> Data
+    
+    /**
+     * Get the complete history of a register, from root to latest entry.
+     *
+     * Returns a list of 32-byte register values in chronological order.
+     */
+    func registerHistoryCollect(address: RegisterAddress) async throws  -> [Data]
+    
+    /**
+     * Update an existing register with a new value
+     *
+     * Returns the cost of the update operation.
+     */
+    func registerUpdate(owner: SecretKey, value: Data, payment: PaymentOption) async throws  -> String
+    
+    /**
+     * Check if a scratchpad exists on the network without fetching it
+     */
+    func scratchpadCheckExistence(addr: ScratchpadAddress) async throws  -> Bool
+    
+    /**
+     * Get the cost of creating a scratchpad for a given public key
+     */
+    func scratchpadCost(publicKey: PublicKey) async throws  -> String
+    
+    /**
+     * Create a new scratchpad on the network
+     * The data is encrypted with the owner's key
+     * Make sure the owner key is not already used for another scratchpad
+     */
+    func scratchpadCreate(owner: SecretKey, contentType: UInt64, initialData: Data, payment: PaymentOption) async throws  -> ScratchpadCreateResult
+    
+    /**
+     * Get a scratchpad from the network by its address
+     */
+    func scratchpadGet(addr: ScratchpadAddress) async throws  -> Scratchpad
+    
+    /**
+     * Get a scratchpad from the network using the owner's public key
+     */
+    func scratchpadGetFromPublicKey(publicKey: PublicKey) async throws  -> Scratchpad
+    
+    /**
+     * Store a scratchpad on the network
+     */
+    func scratchpadPut(scratchpad: Scratchpad, payment: PaymentOption) async throws  -> ScratchpadCreateResult
+    
+    /**
+     * Update an existing scratchpad without fetching it first
+     * This is useful when you already have the scratchpad
+     */
+    func scratchpadPutUpdate(scratchpad: Scratchpad) async throws 
+    
+    /**
+     * Update an existing scratchpad
+     * This operation is free as the scratchpad was already paid for
+     * Only the latest version is kept, previous versions are overwritten
+     */
+    func scratchpadUpdate(owner: SecretKey, contentType: UInt64, data: Data) async throws 
+    
+    /**
+     * Update a scratchpad from a specific current scratchpad
+     * Returns the new updated scratchpad
+     */
+    func scratchpadUpdateFrom(current: Scratchpad, owner: SecretKey, contentType: UInt64, data: Data) async throws  -> Scratchpad
+    
+    /**
+     * Get the cost to create a vault with the given maximum expected size
+     *
+     * # Arguments
+     * * `key` - The vault secret key
+     * * `max_expected_size` - Maximum expected size in bytes
+     */
+    func vaultCost(key: VaultSecretKey, maxExpectedSize: UInt64) async throws  -> String
+    
+    /**
+     * Fetch and decrypt vault data
+     *
+     * Returns the decrypted data and its content type.
+     */
+    func vaultGet(key: VaultSecretKey) async throws  -> VaultGetResult
+    
+    /**
+     * Get user data from a vault
+     *
+     * Returns the UserData containing references to file archives.
+     */
+    func vaultGetUserData(key: VaultSecretKey) async throws  -> UserData
+    
+    /**
+     * Put data into a vault
+     *
+     * Dynamically expands vault capacity by paying for more space when needed.
+     * It is recommended to use the hash of the app name or unique identifier as the content type.
+     *
+     * # Arguments
+     * * `data` - The data to store
+     * * `payment` - Payment option
+     * * `key` - The vault secret key
+     * * `content_type` - Application-specific content type identifier
+     *
+     * Returns the cost of the operation.
+     */
+    func vaultPut(data: Data, payment: PaymentOption, key: VaultSecretKey, contentType: UInt64) async throws  -> String
+    
+    /**
+     * Put user data to a vault
+     *
+     * Returns the cost of the operation.
+     */
+    func vaultPutUserData(key: VaultSecretKey, payment: PaymentOption, userData: UserData) async throws  -> String
     
 }
 
@@ -588,7 +1459,234 @@ public static func initLocal()async throws  -> Client {
         )
 }
     
+    /**
+     * Initialize a new Autonomi client with specific peer multiaddresses
+     *
+     * # Arguments
+     * * `peers` - List of peer multiaddresses to connect to (e.g., "/ip4/10.0.2.2/tcp/12000")
+     * * `evm_network` - EVM network configuration to use for payments (must match the wallet's network)
+     * * `data_dir` - Optional directory path for storing client data. On Android, use the app's cache directory.
+     *
+     * If any of the provided peers is a global address, the client will not be local.
+     */
+public static func initWithPeers(peers: [String], evmNetwork: Network, dataDir: String?)async throws  -> Client {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_constructor_client_init_with_peers(FfiConverterSequenceString.lower(peers),FfiConverterTypeNetwork.lower(evmNetwork),FfiConverterOptionString.lower(dataDir)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeClient.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
 
+    
+    /**
+     * Get the cost of storing an archive on the network
+     */
+open func archiveCost(archive: PublicArchive)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_archive_cost(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublicArchive.lower(archive)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Fetch a private archive from the network using its datamap
+     */
+open func archiveGet(dataMap: DataMapChunk)async throws  -> PrivateArchive {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_archive_get(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeDataMapChunk.lower(dataMap)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypePrivateArchive.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Fetch a public archive from the network
+     */
+open func archiveGetPublic(address: ArchiveAddress)async throws  -> PublicArchive {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_archive_get_public(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeArchiveAddress.lower(address)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypePublicArchive.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Upload a private archive to the network
+     */
+open func archivePut(archive: PrivateArchive, payment: PaymentOption)async throws  -> PrivateArchivePutResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_archive_put(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePrivateArchive.lower(archive),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePrivateArchivePutResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Upload a public archive to the network
+     */
+open func archivePutPublic(archive: PublicArchive, payment: PaymentOption)async throws  -> PublicArchivePutResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_archive_put_public(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublicArchive.lower(archive),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePublicArchivePutResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the cost to store a chunk at a specific address
+     */
+open func chunkCost(addr: ChunkAddress)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_chunk_cost(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeChunkAddress.lower(addr)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get a chunk from the network by its address
+     */
+open func chunkGet(addr: ChunkAddress)async throws  -> Data {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_chunk_get(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeChunkAddress.lower(addr)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterData.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Manually upload a chunk to the network.
+     * It is recommended to use `data_put` for larger data as it handles encryption and chunking.
+     */
+open func chunkPut(data: Data, payment: PaymentOption)async throws  -> ChunkPutResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_chunk_put(
+                    self.uniffiClonePointer(),
+                    FfiConverterData.lower(data),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeChunkPutResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the estimated cost of storing private data
+     */
+open func dataCost(data: Data)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_data_cost(
+                    self.uniffiClonePointer(),
+                    FfiConverterData.lower(data)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Fetch private data from the network using a DataMapChunk.
+     * The data is automatically decrypted and reassembled from chunks.
+     */
+open func dataGet(dataMap: DataMapChunk)async throws  -> Data {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_data_get(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeDataMapChunk.lower(dataMap)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterData.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
     
     /**
      * Fetch public data from the network using a hex-encoded data address
@@ -611,6 +1709,28 @@ open func dataGetPublic(addressHex: String)async throws  -> Data {
 }
     
     /**
+     * Upload private data to the network with self-encryption.
+     * The data is encrypted and split into chunks automatically.
+     * The DataMapChunk contains the metadata needed to retrieve and decrypt the data.
+     */
+open func dataPut(data: Data, payment: PaymentOption)async throws  -> DataPutResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_data_put(
+                    self.uniffiClonePointer(),
+                    FfiConverterData.lower(data),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeDataPutResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
      * Upload data to the network as public data
      *
      * Returns the upload result containing price and data address
@@ -628,6 +1748,902 @@ open func dataPutPublic(data: Data, payment: PaymentOption)async throws  -> Uplo
             completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
             freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
             liftFunc: FfiConverterTypeUploadResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Stream private data from the network.
+     * Use this for large data to avoid loading everything into memory.
+     * Returns a DataStream that can be used to read data in chunks.
+     */
+open func dataStream(dataMap: DataMapChunk)async throws  -> DataStream {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_data_stream(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeDataMapChunk.lower(dataMap)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeDataStream.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Stream public data from the network.
+     * Use this for large data to avoid loading everything into memory.
+     * Returns a DataStream that can be used to read data in chunks.
+     */
+open func dataStreamPublic(address: DataAddress)async throws  -> DataStream {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_data_stream_public(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeDataAddress.lower(address)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeDataStream.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Upload directory content without uploading the archive itself
+     * Returns a PrivateArchive containing references to the uploaded files
+     */
+open func dirContentUpload(path: String, payment: PaymentOption)async throws  -> DirContentUploadResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_dir_content_upload(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(path),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeDirContentUploadResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Download a private directory from the network to a local path
+     */
+open func dirDownload(dataMap: PrivateArchiveDataMap, path: String)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_dir_download(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePrivateArchiveDataMap.lower(dataMap),FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_void,
+            completeFunc: ffi_ant_ffi_rust_future_complete_void,
+            freeFunc: ffi_ant_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Download a public directory from the network to a local path
+     */
+open func dirDownloadPublic(address: ArchiveAddress, path: String)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_dir_download_public(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeArchiveAddress.lower(address),FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_void,
+            completeFunc: ffi_ant_ffi_rust_future_complete_void,
+            freeFunc: ffi_ant_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Upload a directory to the network as a private archive
+     * Returns the PrivateArchiveDataMap needed to retrieve the directory
+     */
+open func dirUpload(path: String, wallet: Wallet)async throws  -> DirUploadResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_dir_upload(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(path),FfiConverterTypeWallet.lower(wallet)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeDirUploadResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Upload a directory as a public archive to the network
+     */
+open func dirUploadPublic(path: String, wallet: Wallet)async throws  -> DirUploadPublicResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_dir_upload_public(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(path),FfiConverterTypeWallet.lower(wallet)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeDirUploadPublicResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the cost to upload a file to the network
+     *
+     * # Arguments
+     * * `path` - Path to the file
+     * * `follow_symlinks` - Whether to follow symbolic links
+     * * `include_hidden` - Whether to include hidden files
+     */
+open func fileCost(path: String, followSymlinks: Bool, includeHidden: Bool)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_file_cost(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(path),FfiConverterBool.lower(followSymlinks),FfiConverterBool.lower(includeHidden)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Download a private file from the network to a local path
+     */
+open func fileDownload(dataMap: DataMapChunk, path: String)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_file_download(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeDataMapChunk.lower(dataMap),FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_void,
+            completeFunc: ffi_ant_ffi_rust_future_complete_void,
+            freeFunc: ffi_ant_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Download a public file from the network to a local path
+     */
+open func fileDownloadPublic(address: DataAddress, path: String)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_file_download_public(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeDataAddress.lower(address),FfiConverterString.lower(path)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_void,
+            completeFunc: ffi_ant_ffi_rust_future_complete_void,
+            freeFunc: ffi_ant_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Upload a private file to the network
+     * Returns the DataMapChunk needed to retrieve the file
+     */
+open func fileUpload(path: String, payment: PaymentOption)async throws  -> FileUploadResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_file_upload(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(path),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFileUploadResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Upload a public file to the network
+     * Returns the DataAddress where the file is stored
+     */
+open func fileUploadPublic(path: String, payment: PaymentOption)async throws  -> FileUploadPublicResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_file_upload_public(
+                    self.uniffiClonePointer(),
+                    FfiConverterString.lower(path),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeFileUploadPublicResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Check if a graph entry exists on the network
+     */
+open func graphEntryCheckExistence(addr: GraphEntryAddress)async throws  -> Bool {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_graph_entry_check_existence(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeGraphEntryAddress.lower(addr)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_i8,
+            completeFunc: ffi_ant_ffi_rust_future_complete_i8,
+            freeFunc: ffi_ant_ffi_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the cost to create a graph entry for a given public key
+     */
+open func graphEntryCost(key: PublicKey)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_graph_entry_cost(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublicKey.lower(key)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Fetch a graph entry from the network
+     */
+open func graphEntryGet(addr: GraphEntryAddress)async throws  -> GraphEntry {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_graph_entry_get(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeGraphEntryAddress.lower(addr)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeGraphEntry.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Put a graph entry to the network
+     */
+open func graphEntryPut(entry: GraphEntry, payment: PaymentOption)async throws  -> GraphEntryPutResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_graph_entry_put(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeGraphEntry.lower(entry),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeGraphEntryPutResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Check if a pointer exists on the network without fetching it
+     */
+open func pointerCheckExistence(addr: PointerAddress)async throws  -> Bool {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_pointer_check_existence(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePointerAddress.lower(addr)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_i8,
+            completeFunc: ffi_ant_ffi_rust_future_complete_i8,
+            freeFunc: ffi_ant_ffi_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the cost of storing a pointer for a given public key
+     */
+open func pointerCost(key: PublicKey)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_pointer_cost(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublicKey.lower(key)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Create a new pointer on the network
+     * Make sure the owner key is not already used for another pointer
+     */
+open func pointerCreate(owner: SecretKey, target: PointerTarget, payment: PaymentOption)async throws  -> PointerCreateResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_pointer_create(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSecretKey.lower(owner),FfiConverterTypePointerTarget.lower(target),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypePointerCreateResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get a pointer from the network by its address
+     */
+open func pointerGet(addr: PointerAddress)async throws  -> NetworkPointer {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_pointer_get(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePointerAddress.lower(addr)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeNetworkPointer.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Store a pointer on the network
+     * Returns the address where the pointer was stored
+     */
+open func pointerPut(pointer: NetworkPointer, payment: PaymentOption)async throws  -> PointerAddress {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_pointer_put(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeNetworkPointer.lower(pointer),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypePointerAddress.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Update an existing pointer to point to a new target
+     * This operation is free as the pointer was already paid for
+     * Only the latest version is kept, previous versions are overwritten
+     */
+open func pointerUpdate(owner: SecretKey, target: PointerTarget)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_pointer_update(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSecretKey.lower(owner),FfiConverterTypePointerTarget.lower(target)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_void,
+            completeFunc: ffi_ant_ffi_rust_future_complete_void,
+            freeFunc: ffi_ant_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Update a pointer from a specific current pointer
+     * Returns the new updated pointer
+     */
+open func pointerUpdateFrom(current: NetworkPointer, owner: SecretKey, target: PointerTarget)async throws  -> NetworkPointer {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_pointer_update_from(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeNetworkPointer.lower(current),FfiConverterTypeSecretKey.lower(owner),FfiConverterTypePointerTarget.lower(target)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeNetworkPointer.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the cost to create a register for a specific owner
+     *
+     * Returns the estimated cost as a string.
+     */
+open func registerCost(owner: PublicKey)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_register_cost(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublicKey.lower(owner)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Create a new register on the network with an initial value
+     *
+     * Registers are mutable versioned storage that can be updated over time.
+     * Returns the cost and address of the created register.
+     */
+open func registerCreate(owner: SecretKey, value: Data, payment: PaymentOption)async throws  -> RegisterCreateResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_register_create(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSecretKey.lower(owner),FfiConverterData.lower(value),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeRegisterCreateResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the current value of a register
+     *
+     * Returns the 32-byte register value.
+     */
+open func registerGet(address: RegisterAddress)async throws  -> Data {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_register_get(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeRegisterAddress.lower(address)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterData.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the complete history of a register, from root to latest entry.
+     *
+     * Returns a list of 32-byte register values in chronological order.
+     */
+open func registerHistoryCollect(address: RegisterAddress)async throws  -> [Data] {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_register_history_collect(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeRegisterAddress.lower(address)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterSequenceData.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Update an existing register with a new value
+     *
+     * Returns the cost of the update operation.
+     */
+open func registerUpdate(owner: SecretKey, value: Data, payment: PaymentOption)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_register_update(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSecretKey.lower(owner),FfiConverterData.lower(value),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Check if a scratchpad exists on the network without fetching it
+     */
+open func scratchpadCheckExistence(addr: ScratchpadAddress)async throws  -> Bool {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_scratchpad_check_existence(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeScratchpadAddress.lower(addr)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_i8,
+            completeFunc: ffi_ant_ffi_rust_future_complete_i8,
+            freeFunc: ffi_ant_ffi_rust_future_free_i8,
+            liftFunc: FfiConverterBool.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the cost of creating a scratchpad for a given public key
+     */
+open func scratchpadCost(publicKey: PublicKey)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_scratchpad_cost(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublicKey.lower(publicKey)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Create a new scratchpad on the network
+     * The data is encrypted with the owner's key
+     * Make sure the owner key is not already used for another scratchpad
+     */
+open func scratchpadCreate(owner: SecretKey, contentType: UInt64, initialData: Data, payment: PaymentOption)async throws  -> ScratchpadCreateResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_scratchpad_create(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSecretKey.lower(owner),FfiConverterUInt64.lower(contentType),FfiConverterData.lower(initialData),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeScratchpadCreateResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get a scratchpad from the network by its address
+     */
+open func scratchpadGet(addr: ScratchpadAddress)async throws  -> Scratchpad {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_scratchpad_get(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeScratchpadAddress.lower(addr)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeScratchpad.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get a scratchpad from the network using the owner's public key
+     */
+open func scratchpadGetFromPublicKey(publicKey: PublicKey)async throws  -> Scratchpad {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_scratchpad_get_from_public_key(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypePublicKey.lower(publicKey)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeScratchpad.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Store a scratchpad on the network
+     */
+open func scratchpadPut(scratchpad: Scratchpad, payment: PaymentOption)async throws  -> ScratchpadCreateResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_scratchpad_put(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeScratchpad.lower(scratchpad),FfiConverterTypePaymentOption.lower(payment)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeScratchpadCreateResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Update an existing scratchpad without fetching it first
+     * This is useful when you already have the scratchpad
+     */
+open func scratchpadPutUpdate(scratchpad: Scratchpad)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_scratchpad_put_update(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeScratchpad.lower(scratchpad)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_void,
+            completeFunc: ffi_ant_ffi_rust_future_complete_void,
+            freeFunc: ffi_ant_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Update an existing scratchpad
+     * This operation is free as the scratchpad was already paid for
+     * Only the latest version is kept, previous versions are overwritten
+     */
+open func scratchpadUpdate(owner: SecretKey, contentType: UInt64, data: Data)async throws  {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_scratchpad_update(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeSecretKey.lower(owner),FfiConverterUInt64.lower(contentType),FfiConverterData.lower(data)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_void,
+            completeFunc: ffi_ant_ffi_rust_future_complete_void,
+            freeFunc: ffi_ant_ffi_rust_future_free_void,
+            liftFunc: { $0 },
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Update a scratchpad from a specific current scratchpad
+     * Returns the new updated scratchpad
+     */
+open func scratchpadUpdateFrom(current: Scratchpad, owner: SecretKey, contentType: UInt64, data: Data)async throws  -> Scratchpad {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_scratchpad_update_from(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeScratchpad.lower(current),FfiConverterTypeSecretKey.lower(owner),FfiConverterUInt64.lower(contentType),FfiConverterData.lower(data)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeScratchpad.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get the cost to create a vault with the given maximum expected size
+     *
+     * # Arguments
+     * * `key` - The vault secret key
+     * * `max_expected_size` - Maximum expected size in bytes
+     */
+open func vaultCost(key: VaultSecretKey, maxExpectedSize: UInt64)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_vault_cost(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeVaultSecretKey.lower(key),FfiConverterUInt64.lower(maxExpectedSize)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Fetch and decrypt vault data
+     *
+     * Returns the decrypted data and its content type.
+     */
+open func vaultGet(key: VaultSecretKey)async throws  -> VaultGetResult {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_vault_get(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeVaultSecretKey.lower(key)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterTypeVaultGetResult.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Get user data from a vault
+     *
+     * Returns the UserData containing references to file archives.
+     */
+open func vaultGetUserData(key: VaultSecretKey)async throws  -> UserData {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_vault_get_user_data(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeVaultSecretKey.lower(key)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_pointer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_pointer,
+            freeFunc: ffi_ant_ffi_rust_future_free_pointer,
+            liftFunc: FfiConverterTypeUserData.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Put data into a vault
+     *
+     * Dynamically expands vault capacity by paying for more space when needed.
+     * It is recommended to use the hash of the app name or unique identifier as the content type.
+     *
+     * # Arguments
+     * * `data` - The data to store
+     * * `payment` - Payment option
+     * * `key` - The vault secret key
+     * * `content_type` - Application-specific content type identifier
+     *
+     * Returns the cost of the operation.
+     */
+open func vaultPut(data: Data, payment: PaymentOption, key: VaultSecretKey, contentType: UInt64)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_vault_put(
+                    self.uniffiClonePointer(),
+                    FfiConverterData.lower(data),FfiConverterTypePaymentOption.lower(payment),FfiConverterTypeVaultSecretKey.lower(key),FfiConverterUInt64.lower(contentType)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
+            errorHandler: FfiConverterTypeClientError.lift
+        )
+}
+    
+    /**
+     * Put user data to a vault
+     *
+     * Returns the cost of the operation.
+     */
+open func vaultPutUserData(key: VaultSecretKey, payment: PaymentOption, userData: UserData)async throws  -> String {
+    return
+        try  await uniffiRustCallAsync(
+            rustFutureFunc: {
+                uniffi_ant_ffi_fn_method_client_vault_put_user_data(
+                    self.uniffiClonePointer(),
+                    FfiConverterTypeVaultSecretKey.lower(key),FfiConverterTypePaymentOption.lower(payment),FfiConverterTypeUserData.lower(userData)
+                )
+            },
+            pollFunc: ffi_ant_ffi_rust_future_poll_rust_buffer,
+            completeFunc: ffi_ant_ffi_rust_future_complete_rust_buffer,
+            freeFunc: ffi_ant_ffi_rust_future_free_rust_buffer,
+            liftFunc: FfiConverterString.lift,
             errorHandler: FfiConverterTypeClientError.lift
         )
 }
@@ -684,6 +2700,1985 @@ public func FfiConverterTypeClient_lift(_ pointer: UnsafeMutableRawPointer) thro
 #endif
 public func FfiConverterTypeClient_lower(_ value: Client) -> UnsafeMutableRawPointer {
     return FfiConverterTypeClient.lower(value)
+}
+
+
+
+
+/**
+ * Address of public data on the network
+ */
+public protocol DataAddressProtocol : AnyObject {
+    
+    /**
+     * Returns the raw bytes of the address (32 bytes)
+     */
+    func toBytes()  -> Data
+    
+    /**
+     * Returns the hex string representation of the address
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * Address of public data on the network
+ */
+open class DataAddress:
+    DataAddressProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_dataaddress(self.pointer, $0) }
+    }
+    /**
+     * Construct a new DataAddress from raw bytes (32 bytes)
+     */
+public convenience init(bytes: Data)throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypeDataError.lift) {
+    uniffi_ant_ffi_fn_constructor_dataaddress_new(
+        FfiConverterData.lower(bytes),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_dataaddress(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a DataAddress from a hex string
+     */
+public static func fromHex(hex: String)throws  -> DataAddress {
+    return try  FfiConverterTypeDataAddress.lift(try rustCallWithError(FfiConverterTypeDataError.lift) {
+    uniffi_ant_ffi_fn_constructor_dataaddress_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the raw bytes of the address (32 bytes)
+     */
+open func toBytes() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_dataaddress_to_bytes(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the hex string representation of the address
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_dataaddress_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDataAddress: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = DataAddress
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> DataAddress {
+        return DataAddress(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: DataAddress) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DataAddress {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: DataAddress, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataAddress_lift(_ pointer: UnsafeMutableRawPointer) throws -> DataAddress {
+    return try FfiConverterTypeDataAddress.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataAddress_lower(_ value: DataAddress) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeDataAddress.lower(value)
+}
+
+
+
+
+/**
+ * DataMapChunk contains the metadata needed to decrypt and retrieve private data.
+ * It's returned when uploading private data and used when downloading it.
+ */
+public protocol DataMapChunkProtocol : AnyObject {
+    
+    /**
+     * Returns the address of this DataMapChunk
+     * Note: This is not a network address, it's only used for referring to private data client-side
+     */
+    func address()  -> String
+    
+    /**
+     * Returns the hex string representation of this DataMapChunk
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * DataMapChunk contains the metadata needed to decrypt and retrieve private data.
+ * It's returned when uploading private data and used when downloading it.
+ */
+open class DataMapChunk:
+    DataMapChunkProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_datamapchunk(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_datamapchunk(pointer, $0) }
+    }
+
+    
+    /**
+     * Creates a DataMapChunk from a hex string representation
+     */
+public static func fromHex(hex: String)throws  -> DataMapChunk {
+    return try  FfiConverterTypeDataMapChunk.lift(try rustCallWithError(FfiConverterTypeDataError.lift) {
+    uniffi_ant_ffi_fn_constructor_datamapchunk_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the address of this DataMapChunk
+     * Note: This is not a network address, it's only used for referring to private data client-side
+     */
+open func address() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_datamapchunk_address(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the hex string representation of this DataMapChunk
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_datamapchunk_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDataMapChunk: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = DataMapChunk
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> DataMapChunk {
+        return DataMapChunk(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: DataMapChunk) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DataMapChunk {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: DataMapChunk, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataMapChunk_lift(_ pointer: UnsafeMutableRawPointer) throws -> DataMapChunk {
+    return try FfiConverterTypeDataMapChunk.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataMapChunk_lower(_ value: DataMapChunk) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeDataMapChunk.lower(value)
+}
+
+
+
+
+/**
+ * A stream for reading large data in chunks without loading everything into memory.
+ *
+ * Use `next_chunk()` to get the next chunk of data, or `collect_all()` to get all data at once.
+ */
+public protocol DataStreamProtocol : AnyObject {
+    
+    /**
+     * Collect all remaining chunks into a single buffer.
+     * This loads all data into memory, so use with caution for large data.
+     */
+    func collectAll() throws  -> Data
+    
+    /**
+     * Get the original data size in bytes.
+     */
+    func dataSize() throws  -> UInt64
+    
+    /**
+     * Decrypts and returns a specific byte range from the encrypted data.
+     *
+     * # Arguments
+     * * `start` - The starting byte position (inclusive)
+     * * `length` - The number of bytes to read
+     *
+     * Returns the decrypted bytes for the requested range.
+     */
+    func getRange(start: UInt64, length: UInt64) throws  -> Data
+    
+    /**
+     * Get the next chunk of data from the stream.
+     * Returns None when the stream is exhausted.
+     */
+    func nextChunk() throws  -> Data?
+    
+}
+
+/**
+ * A stream for reading large data in chunks without loading everything into memory.
+ *
+ * Use `next_chunk()` to get the next chunk of data, or `collect_all()` to get all data at once.
+ */
+open class DataStream:
+    DataStreamProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_datastream(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_datastream(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Collect all remaining chunks into a single buffer.
+     * This loads all data into memory, so use with caution for large data.
+     */
+open func collectAll()throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_ant_ffi_fn_method_datastream_collect_all(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the original data size in bytes.
+     */
+open func dataSize()throws  -> UInt64 {
+    return try  FfiConverterUInt64.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_ant_ffi_fn_method_datastream_data_size(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Decrypts and returns a specific byte range from the encrypted data.
+     *
+     * # Arguments
+     * * `start` - The starting byte position (inclusive)
+     * * `length` - The number of bytes to read
+     *
+     * Returns the decrypted bytes for the requested range.
+     */
+open func getRange(start: UInt64, length: UInt64)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_ant_ffi_fn_method_datastream_get_range(self.uniffiClonePointer(),
+        FfiConverterUInt64.lower(start),
+        FfiConverterUInt64.lower(length),$0
+    )
+})
+}
+    
+    /**
+     * Get the next chunk of data from the stream.
+     * Returns None when the stream is exhausted.
+     */
+open func nextChunk()throws  -> Data? {
+    return try  FfiConverterOptionData.lift(try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_ant_ffi_fn_method_datastream_next_chunk(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDataStream: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = DataStream
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> DataStream {
+        return DataStream(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: DataStream) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DataStream {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: DataStream, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataStream_lift(_ pointer: UnsafeMutableRawPointer) throws -> DataStream {
+    return try FfiConverterTypeDataStream.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataStream_lower(_ value: DataStream) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeDataStream.lower(value)
+}
+
+
+
+
+/**
+ * Index for deriving child keys from a master key
+ */
+public protocol DerivationIndexProtocol : AnyObject {
+    
+    /**
+     * Returns the bytes representation of the derivation index
+     */
+    func toBytes()  -> Data
+    
+}
+
+/**
+ * Index for deriving child keys from a master key
+ */
+open class DerivationIndex:
+    DerivationIndexProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_derivationindex(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_derivationindex(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a derivation index from 32 bytes
+     */
+public static func fromBytes(bytes: Data)throws  -> DerivationIndex {
+    return try  FfiConverterTypeDerivationIndex.lift(try rustCallWithError(FfiConverterTypeKeyError.lift) {
+    uniffi_ant_ffi_fn_constructor_derivationindex_from_bytes(
+        FfiConverterData.lower(bytes),$0
+    )
+})
+}
+    
+    /**
+     * Generate a random derivation index
+     */
+public static func random() -> DerivationIndex {
+    return try!  FfiConverterTypeDerivationIndex.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_derivationindex_random($0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the bytes representation of the derivation index
+     */
+open func toBytes() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_derivationindex_to_bytes(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDerivationIndex: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = DerivationIndex
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> DerivationIndex {
+        return DerivationIndex(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: DerivationIndex) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DerivationIndex {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: DerivationIndex, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDerivationIndex_lift(_ pointer: UnsafeMutableRawPointer) throws -> DerivationIndex {
+    return try FfiConverterTypeDerivationIndex.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDerivationIndex_lower(_ value: DerivationIndex) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeDerivationIndex.lower(value)
+}
+
+
+
+
+/**
+ * Derived public key from hierarchical key derivation
+ */
+public protocol DerivedPubkeyProtocol : AnyObject {
+    
+    /**
+     * Returns the bytes representation of the public key
+     */
+    func toBytes()  -> Data
+    
+    /**
+     * Returns the hex representation of the public key
+     */
+    func toHex()  -> String
+    
+    /**
+     * Verify that a signature is valid for the given message
+     */
+    func verify(signature: Signature, msg: Data)  -> Bool
+    
+}
+
+/**
+ * Derived public key from hierarchical key derivation
+ */
+open class DerivedPubkey:
+    DerivedPubkeyProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_derivedpubkey(self.pointer, $0) }
+    }
+    /**
+     * Create a DerivedPubkey from a PublicKey
+     */
+public convenience init(publicKey: PublicKey) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_derivedpubkey_new(
+        FfiConverterTypePublicKey.lower(publicKey),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_derivedpubkey(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a DerivedPubkey from a hex string
+     */
+public static func fromHex(hex: String)throws  -> DerivedPubkey {
+    return try  FfiConverterTypeDerivedPubkey.lift(try rustCallWithError(FfiConverterTypeKeyError.lift) {
+    uniffi_ant_ffi_fn_constructor_derivedpubkey_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the bytes representation of the public key
+     */
+open func toBytes() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_derivedpubkey_to_bytes(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the hex representation of the public key
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_derivedpubkey_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Verify that a signature is valid for the given message
+     */
+open func verify(signature: Signature, msg: Data) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_derivedpubkey_verify(self.uniffiClonePointer(),
+        FfiConverterTypeSignature.lower(signature),
+        FfiConverterData.lower(msg),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDerivedPubkey: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = DerivedPubkey
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> DerivedPubkey {
+        return DerivedPubkey(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: DerivedPubkey) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DerivedPubkey {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: DerivedPubkey, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDerivedPubkey_lift(_ pointer: UnsafeMutableRawPointer) throws -> DerivedPubkey {
+    return try FfiConverterTypeDerivedPubkey.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDerivedPubkey_lower(_ value: DerivedPubkey) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeDerivedPubkey.lower(value)
+}
+
+
+
+
+/**
+ * Derived secret key from hierarchical key derivation
+ */
+public protocol DerivedSecretKeyProtocol : AnyObject {
+    
+    /**
+     * Get the corresponding DerivedPubkey
+     */
+    func publicKey()  -> DerivedPubkey
+    
+    /**
+     * Sign a message with this derived secret key
+     */
+    func sign(msg: Data)  -> Signature
+    
+}
+
+/**
+ * Derived secret key from hierarchical key derivation
+ */
+open class DerivedSecretKey:
+    DerivedSecretKeyProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_derivedsecretkey(self.pointer, $0) }
+    }
+    /**
+     * Create a DerivedSecretKey from a SecretKey
+     */
+public convenience init(secretKey: SecretKey) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_derivedsecretkey_new(
+        FfiConverterTypeSecretKey.lower(secretKey),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_derivedsecretkey(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Get the corresponding DerivedPubkey
+     */
+open func publicKey() -> DerivedPubkey {
+    return try!  FfiConverterTypeDerivedPubkey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_derivedsecretkey_public_key(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Sign a message with this derived secret key
+     */
+open func sign(msg: Data) -> Signature {
+    return try!  FfiConverterTypeSignature.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_derivedsecretkey_sign(self.uniffiClonePointer(),
+        FfiConverterData.lower(msg),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDerivedSecretKey: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = DerivedSecretKey
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> DerivedSecretKey {
+        return DerivedSecretKey(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: DerivedSecretKey) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DerivedSecretKey {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: DerivedSecretKey, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDerivedSecretKey_lift(_ pointer: UnsafeMutableRawPointer) throws -> DerivedSecretKey {
+    return try FfiConverterTypeDerivedSecretKey.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDerivedSecretKey_lower(_ value: DerivedSecretKey) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeDerivedSecretKey.lower(value)
+}
+
+
+
+
+/**
+ * A graph entry that can be stored on the network
+ */
+public protocol GraphEntryProtocol : AnyObject {
+    
+    /**
+     * Get the network address where this entry is stored
+     */
+    func address()  -> GraphEntryAddress
+    
+    /**
+     * Get the content of the graph entry
+     */
+    func content()  -> Data
+    
+    /**
+     * Get the descendants as (public_key, content) pairs
+     */
+    func descendants()  -> [GraphDescendant]
+    
+    /**
+     * Get the parents' public keys
+     */
+    func parents()  -> [PublicKey]
+    
+}
+
+/**
+ * A graph entry that can be stored on the network
+ */
+open class GraphEntry:
+    GraphEntryProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_graphentry(self.pointer, $0) }
+    }
+    /**
+     * Create a new graph entry, signing it with the provided secret key
+     */
+public convenience init(owner: SecretKey, parents: [PublicKey], content: Data, descendants: [GraphDescendant])throws  {
+    let pointer =
+        try rustCallWithError(FfiConverterTypeGraphEntryError.lift) {
+    uniffi_ant_ffi_fn_constructor_graphentry_new(
+        FfiConverterTypeSecretKey.lower(owner),
+        FfiConverterSequenceTypePublicKey.lower(parents),
+        FfiConverterData.lower(content),
+        FfiConverterSequenceTypeGraphDescendant.lower(descendants),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_graphentry(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Get the network address where this entry is stored
+     */
+open func address() -> GraphEntryAddress {
+    return try!  FfiConverterTypeGraphEntryAddress.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_graphentry_address(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the content of the graph entry
+     */
+open func content() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_graphentry_content(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the descendants as (public_key, content) pairs
+     */
+open func descendants() -> [GraphDescendant] {
+    return try!  FfiConverterSequenceTypeGraphDescendant.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_graphentry_descendants(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the parents' public keys
+     */
+open func parents() -> [PublicKey] {
+    return try!  FfiConverterSequenceTypePublicKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_graphentry_parents(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGraphEntry: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = GraphEntry
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> GraphEntry {
+        return GraphEntry(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: GraphEntry) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GraphEntry {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: GraphEntry, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGraphEntry_lift(_ pointer: UnsafeMutableRawPointer) throws -> GraphEntry {
+    return try FfiConverterTypeGraphEntry.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGraphEntry_lower(_ value: GraphEntry) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeGraphEntry.lower(value)
+}
+
+
+
+
+/**
+ * Address of a graph entry on the network
+ */
+public protocol GraphEntryAddressProtocol : AnyObject {
+    
+    /**
+     * Get the hex representation of the address
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * Address of a graph entry on the network
+ */
+open class GraphEntryAddress:
+    GraphEntryAddressProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_graphentryaddress(self.pointer, $0) }
+    }
+    /**
+     * Create a graph entry address from a public key
+     */
+public convenience init(publicKey: PublicKey) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_graphentryaddress_new(
+        FfiConverterTypePublicKey.lower(publicKey),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_graphentryaddress(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a graph entry address from a hex string
+     */
+public static func fromHex(hex: String)throws  -> GraphEntryAddress {
+    return try  FfiConverterTypeGraphEntryAddress.lift(try rustCallWithError(FfiConverterTypeGraphEntryError.lift) {
+    uniffi_ant_ffi_fn_constructor_graphentryaddress_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Get the hex representation of the address
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_graphentryaddress_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGraphEntryAddress: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = GraphEntryAddress
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> GraphEntryAddress {
+        return GraphEntryAddress(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: GraphEntryAddress) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GraphEntryAddress {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: GraphEntryAddress, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGraphEntryAddress_lift(_ pointer: UnsafeMutableRawPointer) throws -> GraphEntryAddress {
+    return try FfiConverterTypeGraphEntryAddress.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGraphEntryAddress_lower(_ value: GraphEntryAddress) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeGraphEntryAddress.lower(value)
+}
+
+
+
+
+/**
+ * Master public key for hierarchical key derivation
+ */
+public protocol MainPubkeyProtocol : AnyObject {
+    
+    /**
+     * Derive a DerivedPubkey from this master public key using the given index
+     */
+    func deriveKey(index: DerivationIndex)  -> DerivedPubkey
+    
+    /**
+     * Returns the bytes representation of the public key
+     */
+    func toBytes()  -> Data
+    
+    /**
+     * Returns the hex representation of the public key
+     */
+    func toHex()  -> String
+    
+    /**
+     * Verify that a signature is valid for the given message
+     */
+    func verify(signature: Signature, msg: Data)  -> Bool
+    
+}
+
+/**
+ * Master public key for hierarchical key derivation
+ */
+open class MainPubkey:
+    MainPubkeyProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_mainpubkey(self.pointer, $0) }
+    }
+    /**
+     * Create a MainPubkey from a PublicKey
+     */
+public convenience init(publicKey: PublicKey) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_mainpubkey_new(
+        FfiConverterTypePublicKey.lower(publicKey),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_mainpubkey(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a MainPubkey from a hex string
+     */
+public static func fromHex(hex: String)throws  -> MainPubkey {
+    return try  FfiConverterTypeMainPubkey.lift(try rustCallWithError(FfiConverterTypeKeyError.lift) {
+    uniffi_ant_ffi_fn_constructor_mainpubkey_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Derive a DerivedPubkey from this master public key using the given index
+     */
+open func deriveKey(index: DerivationIndex) -> DerivedPubkey {
+    return try!  FfiConverterTypeDerivedPubkey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_mainpubkey_derive_key(self.uniffiClonePointer(),
+        FfiConverterTypeDerivationIndex.lower(index),$0
+    )
+})
+}
+    
+    /**
+     * Returns the bytes representation of the public key
+     */
+open func toBytes() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_mainpubkey_to_bytes(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the hex representation of the public key
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_mainpubkey_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Verify that a signature is valid for the given message
+     */
+open func verify(signature: Signature, msg: Data) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_mainpubkey_verify(self.uniffiClonePointer(),
+        FfiConverterTypeSignature.lower(signature),
+        FfiConverterData.lower(msg),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMainPubkey: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = MainPubkey
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> MainPubkey {
+        return MainPubkey(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: MainPubkey) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MainPubkey {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: MainPubkey, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMainPubkey_lift(_ pointer: UnsafeMutableRawPointer) throws -> MainPubkey {
+    return try FfiConverterTypeMainPubkey.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMainPubkey_lower(_ value: MainPubkey) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeMainPubkey.lower(value)
+}
+
+
+
+
+/**
+ * Master secret key for hierarchical key derivation
+ * Can be used to derive multiple child keys
+ */
+public protocol MainSecretKeyProtocol : AnyObject {
+    
+    /**
+     * Derive a DerivedSecretKey from this master key using the given index
+     */
+    func deriveKey(index: DerivationIndex)  -> DerivedSecretKey
+    
+    /**
+     * Return the matching MainPubkey
+     */
+    func publicKey()  -> MainPubkey
+    
+    /**
+     * Generate a new random DerivedSecretKey from this master key
+     */
+    func randomDerivedKey()  -> DerivedSecretKey
+    
+    /**
+     * Sign a message with this secret key
+     */
+    func sign(msg: Data)  -> Signature
+    
+    /**
+     * Returns the raw bytes of the secret key
+     */
+    func toBytes()  -> Data
+    
+}
+
+/**
+ * Master secret key for hierarchical key derivation
+ * Can be used to derive multiple child keys
+ */
+open class MainSecretKey:
+    MainSecretKeyProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_mainsecretkey(self.pointer, $0) }
+    }
+    /**
+     * Create a MainSecretKey from a SecretKey
+     */
+public convenience init(secretKey: SecretKey) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_mainsecretkey_new(
+        FfiConverterTypeSecretKey.lower(secretKey),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_mainsecretkey(pointer, $0) }
+    }
+
+    
+    /**
+     * Generate a random MainSecretKey
+     */
+public static func random() -> MainSecretKey {
+    return try!  FfiConverterTypeMainSecretKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_mainsecretkey_random($0
+    )
+})
+}
+    
+
+    
+    /**
+     * Derive a DerivedSecretKey from this master key using the given index
+     */
+open func deriveKey(index: DerivationIndex) -> DerivedSecretKey {
+    return try!  FfiConverterTypeDerivedSecretKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_mainsecretkey_derive_key(self.uniffiClonePointer(),
+        FfiConverterTypeDerivationIndex.lower(index),$0
+    )
+})
+}
+    
+    /**
+     * Return the matching MainPubkey
+     */
+open func publicKey() -> MainPubkey {
+    return try!  FfiConverterTypeMainPubkey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_mainsecretkey_public_key(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Generate a new random DerivedSecretKey from this master key
+     */
+open func randomDerivedKey() -> DerivedSecretKey {
+    return try!  FfiConverterTypeDerivedSecretKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_mainsecretkey_random_derived_key(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Sign a message with this secret key
+     */
+open func sign(msg: Data) -> Signature {
+    return try!  FfiConverterTypeSignature.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_mainsecretkey_sign(self.uniffiClonePointer(),
+        FfiConverterData.lower(msg),$0
+    )
+})
+}
+    
+    /**
+     * Returns the raw bytes of the secret key
+     */
+open func toBytes() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_mainsecretkey_to_bytes(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMainSecretKey: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = MainSecretKey
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> MainSecretKey {
+        return MainSecretKey(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: MainSecretKey) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> MainSecretKey {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: MainSecretKey, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMainSecretKey_lift(_ pointer: UnsafeMutableRawPointer) throws -> MainSecretKey {
+    return try FfiConverterTypeMainSecretKey.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMainSecretKey_lower(_ value: MainSecretKey) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeMainSecretKey.lower(value)
+}
+
+
+
+
+/**
+ * Metadata for files in an archive, containing creation time, modification time, and size.
+ */
+public protocol MetadataProtocol : AnyObject {
+    
+    /**
+     * Get the creation time as Unix timestamp in seconds
+     */
+    func created()  -> UInt64
+    
+    /**
+     * Get the modification time as Unix timestamp in seconds
+     */
+    func modified()  -> UInt64
+    
+    /**
+     * Get the file size in bytes
+     */
+    func size()  -> UInt64
+    
+}
+
+/**
+ * Metadata for files in an archive, containing creation time, modification time, and size.
+ */
+open class Metadata:
+    MetadataProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_metadata(self.pointer, $0) }
+    }
+    /**
+     * Create new metadata with the given file size.
+     * Creation and modification times are set to the current time.
+     */
+public convenience init(size: UInt64) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_metadata_new(
+        FfiConverterUInt64.lower(size),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_metadata(pointer, $0) }
+    }
+
+    
+    /**
+     * Create metadata with specific timestamps
+     */
+public static func withTimestamps(size: UInt64, created: UInt64, modified: UInt64) -> Metadata {
+    return try!  FfiConverterTypeMetadata.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_metadata_with_timestamps(
+        FfiConverterUInt64.lower(size),
+        FfiConverterUInt64.lower(created),
+        FfiConverterUInt64.lower(modified),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Get the creation time as Unix timestamp in seconds
+     */
+open func created() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_metadata_created(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the modification time as Unix timestamp in seconds
+     */
+open func modified() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_metadata_modified(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the file size in bytes
+     */
+open func size() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_metadata_size(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMetadata: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Metadata
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Metadata {
+        return Metadata(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Metadata) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Metadata {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Metadata, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMetadata_lift(_ pointer: UnsafeMutableRawPointer) throws -> Metadata {
+    return try FfiConverterTypeMetadata.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMetadata_lower(_ value: Metadata) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeMetadata.lower(value)
 }
 
 
@@ -761,6 +4756,26 @@ public convenience init(isLocal: Bool)throws  {
     }
 
     
+    /**
+     * Create a custom network configuration with specific RPC URL and contract addresses
+     *
+     * # Arguments
+     * * `rpc_url` - RPC URL for the EVM network (e.g., "http://10.0.2.2:61611")
+     * * `payment_token_address` - Payment token contract address (hex string)
+     * * `data_payments_address` - Data payments contract address (hex string)
+     * * `royalties_pk_hex` - Optional royalties public key (hex string)
+     */
+public static func custom(rpcUrl: String, paymentTokenAddress: String, dataPaymentsAddress: String, royaltiesPkHex: String?) -> Network {
+    return try!  FfiConverterTypeNetwork.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_network_custom(
+        FfiConverterString.lower(rpcUrl),
+        FfiConverterString.lower(paymentTokenAddress),
+        FfiConverterString.lower(dataPaymentsAddress),
+        FfiConverterOptionString.lower(royaltiesPkHex),$0
+    )
+})
+}
+    
 
     
 
@@ -815,6 +4830,2495 @@ public func FfiConverterTypeNetwork_lift(_ pointer: UnsafeMutableRawPointer) thr
 #endif
 public func FfiConverterTypeNetwork_lower(_ value: Network) -> UnsafeMutableRawPointer {
     return FfiConverterTypeNetwork.lower(value)
+}
+
+
+
+
+/**
+ * A mutable pointer to data on the network
+ * Stored at the owner's public key address and can only be updated by the owner
+ */
+public protocol NetworkPointerProtocol : AnyObject {
+    
+    /**
+     * Get the network address where this pointer is stored
+     */
+    func address()  -> PointerAddress
+    
+    /**
+     * Get the counter value (version) of this pointer
+     */
+    func counter()  -> UInt64
+    
+    /**
+     * Get the target that this pointer points to
+     */
+    func target()  -> PointerTarget
+    
+}
+
+/**
+ * A mutable pointer to data on the network
+ * Stored at the owner's public key address and can only be updated by the owner
+ */
+open class NetworkPointer:
+    NetworkPointerProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_networkpointer(self.pointer, $0) }
+    }
+    /**
+     * Create a new pointer signed with the provided secret key
+     * There can only be one pointer per key on the network
+     */
+public convenience init(key: SecretKey, counter: UInt64, target: PointerTarget) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_networkpointer_new(
+        FfiConverterTypeSecretKey.lower(key),
+        FfiConverterUInt64.lower(counter),
+        FfiConverterTypePointerTarget.lower(target),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_networkpointer(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Get the network address where this pointer is stored
+     */
+open func address() -> PointerAddress {
+    return try!  FfiConverterTypePointerAddress.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_networkpointer_address(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the counter value (version) of this pointer
+     */
+open func counter() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_networkpointer_counter(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the target that this pointer points to
+     */
+open func target() -> PointerTarget {
+    return try!  FfiConverterTypePointerTarget.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_networkpointer_target(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNetworkPointer: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = NetworkPointer
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> NetworkPointer {
+        return NetworkPointer(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: NetworkPointer) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NetworkPointer {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: NetworkPointer, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkPointer_lift(_ pointer: UnsafeMutableRawPointer) throws -> NetworkPointer {
+    return try FfiConverterTypeNetworkPointer.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNetworkPointer_lower(_ value: NetworkPointer) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeNetworkPointer.lower(value)
+}
+
+
+
+
+/**
+ * Address of a pointer on the network, derived from the owner's public key
+ */
+public protocol PointerAddressProtocol : AnyObject {
+    
+    /**
+     * Returns the owner's public key
+     */
+    func owner()  -> PublicKey
+    
+    /**
+     * Serialize to hex string
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * Address of a pointer on the network, derived from the owner's public key
+ */
+open class PointerAddress:
+    PointerAddressProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_pointeraddress(self.pointer, $0) }
+    }
+    /**
+     * Create a new PointerAddress from a public key (owner)
+     */
+public convenience init(publicKey: PublicKey) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_pointeraddress_new(
+        FfiConverterTypePublicKey.lower(publicKey),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_pointeraddress(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a PointerAddress from a hex string
+     */
+public static func fromHex(hex: String)throws  -> PointerAddress {
+    return try  FfiConverterTypePointerAddress.lift(try rustCallWithError(FfiConverterTypePointerError.lift) {
+    uniffi_ant_ffi_fn_constructor_pointeraddress_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the owner's public key
+     */
+open func owner() -> PublicKey {
+    return try!  FfiConverterTypePublicKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_pointeraddress_owner(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Serialize to hex string
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_pointeraddress_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePointerAddress: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PointerAddress
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PointerAddress {
+        return PointerAddress(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PointerAddress) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PointerAddress {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PointerAddress, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePointerAddress_lift(_ pointer: UnsafeMutableRawPointer) throws -> PointerAddress {
+    return try FfiConverterTypePointerAddress.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePointerAddress_lower(_ value: PointerAddress) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePointerAddress.lower(value)
+}
+
+
+
+
+/**
+ * The target that a pointer can point to on the network
+ */
+public protocol PointerTargetProtocol : AnyObject {
+    
+    /**
+     * Serialize to hex string
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * The target that a pointer can point to on the network
+ */
+open class PointerTarget:
+    PointerTargetProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_pointertarget(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_pointertarget(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a pointer target pointing to a chunk
+     */
+public static func chunk(addr: ChunkAddress) -> PointerTarget {
+    return try!  FfiConverterTypePointerTarget.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_pointertarget_chunk(
+        FfiConverterTypeChunkAddress.lower(addr),$0
+    )
+})
+}
+    
+    /**
+     * Create a pointer target pointing to a graph entry
+     */
+public static func graphEntry(addr: GraphEntryAddress) -> PointerTarget {
+    return try!  FfiConverterTypePointerTarget.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_pointertarget_graph_entry(
+        FfiConverterTypeGraphEntryAddress.lower(addr),$0
+    )
+})
+}
+    
+    /**
+     * Create a pointer target pointing to another pointer
+     */
+public static func pointer(addr: PointerAddress) -> PointerTarget {
+    return try!  FfiConverterTypePointerTarget.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_pointertarget_pointer(
+        FfiConverterTypePointerAddress.lower(addr),$0
+    )
+})
+}
+    
+    /**
+     * Create a pointer target pointing to a scratchpad
+     */
+public static func scratchpad(addr: ScratchpadAddress) -> PointerTarget {
+    return try!  FfiConverterTypePointerTarget.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_pointertarget_scratchpad(
+        FfiConverterTypeScratchpadAddress.lower(addr),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Serialize to hex string
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_pointertarget_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePointerTarget: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PointerTarget
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PointerTarget {
+        return PointerTarget(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PointerTarget) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PointerTarget {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PointerTarget, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePointerTarget_lift(_ pointer: UnsafeMutableRawPointer) throws -> PointerTarget {
+    return try FfiConverterTypePointerTarget.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePointerTarget_lower(_ value: PointerTarget) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePointerTarget.lower(value)
+}
+
+
+
+
+/**
+ * A private archive containing files with encrypted access.
+ */
+public protocol PrivateArchiveProtocol : AnyObject {
+    
+    /**
+     * Add a file to the archive
+     */
+    func addFile(path: String, dataMap: DataMapChunk, metadata: Metadata)  -> PrivateArchive
+    
+    /**
+     * Get all data maps in the archive
+     */
+    func dataMaps()  -> [DataMapChunk]
+    
+    /**
+     * Get the number of files in the archive
+     */
+    func fileCount()  -> UInt64
+    
+    /**
+     * List all files in the archive
+     */
+    func files()  -> [PrivateArchiveFileEntry]
+    
+    /**
+     * Rename a file in the archive
+     */
+    func renameFile(oldPath: String, newPath: String) throws  -> PrivateArchive
+    
+}
+
+/**
+ * A private archive containing files with encrypted access.
+ */
+open class PrivateArchive:
+    PrivateArchiveProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_privatearchive(self.pointer, $0) }
+    }
+    /**
+     * Create a new empty private archive
+     */
+public convenience init() {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_privatearchive_new($0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_privatearchive(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Add a file to the archive
+     */
+open func addFile(path: String, dataMap: DataMapChunk, metadata: Metadata) -> PrivateArchive {
+    return try!  FfiConverterTypePrivateArchive.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_privatearchive_add_file(self.uniffiClonePointer(),
+        FfiConverterString.lower(path),
+        FfiConverterTypeDataMapChunk.lower(dataMap),
+        FfiConverterTypeMetadata.lower(metadata),$0
+    )
+})
+}
+    
+    /**
+     * Get all data maps in the archive
+     */
+open func dataMaps() -> [DataMapChunk] {
+    return try!  FfiConverterSequenceTypeDataMapChunk.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_privatearchive_data_maps(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the number of files in the archive
+     */
+open func fileCount() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_privatearchive_file_count(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * List all files in the archive
+     */
+open func files() -> [PrivateArchiveFileEntry] {
+    return try!  FfiConverterSequenceTypePrivateArchiveFileEntry.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_privatearchive_files(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Rename a file in the archive
+     */
+open func renameFile(oldPath: String, newPath: String)throws  -> PrivateArchive {
+    return try  FfiConverterTypePrivateArchive.lift(try rustCallWithError(FfiConverterTypeArchiveError.lift) {
+    uniffi_ant_ffi_fn_method_privatearchive_rename_file(self.uniffiClonePointer(),
+        FfiConverterString.lower(oldPath),
+        FfiConverterString.lower(newPath),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrivateArchive: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PrivateArchive
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PrivateArchive {
+        return PrivateArchive(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PrivateArchive) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrivateArchive {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PrivateArchive, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateArchive_lift(_ pointer: UnsafeMutableRawPointer) throws -> PrivateArchive {
+    return try FfiConverterTypePrivateArchive.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateArchive_lower(_ value: PrivateArchive) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePrivateArchive.lower(value)
+}
+
+
+
+
+/**
+ * Datamap for a private archive, used to retrieve the archive from the network
+ */
+public protocol PrivateArchiveDataMapProtocol : AnyObject {
+    
+    /**
+     * Returns the hex string representation of this private archive datamap
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * Datamap for a private archive, used to retrieve the archive from the network
+ */
+open class PrivateArchiveDataMap:
+    PrivateArchiveDataMapProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_privatearchivedatamap(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_privatearchivedatamap(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a PrivateArchiveDataMap from a hex string
+     */
+public static func fromHex(hex: String)throws  -> PrivateArchiveDataMap {
+    return try  FfiConverterTypePrivateArchiveDataMap.lift(try rustCallWithError(FfiConverterTypeArchiveError.lift) {
+    uniffi_ant_ffi_fn_constructor_privatearchivedatamap_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the hex string representation of this private archive datamap
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_privatearchivedatamap_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrivateArchiveDataMap: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PrivateArchiveDataMap
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PrivateArchiveDataMap {
+        return PrivateArchiveDataMap(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PrivateArchiveDataMap) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrivateArchiveDataMap {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PrivateArchiveDataMap, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateArchiveDataMap_lift(_ pointer: UnsafeMutableRawPointer) throws -> PrivateArchiveDataMap {
+    return try FfiConverterTypePrivateArchiveDataMap.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateArchiveDataMap_lower(_ value: PrivateArchiveDataMap) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePrivateArchiveDataMap.lower(value)
+}
+
+
+
+
+/**
+ * A public archive containing files that can be accessed by anyone on the network.
+ */
+public protocol PublicArchiveProtocol : AnyObject {
+    
+    /**
+     * Add a file to the archive
+     */
+    func addFile(path: String, address: DataAddress, metadata: Metadata)  -> PublicArchive
+    
+    /**
+     * Get all data addresses in the archive
+     */
+    func addresses()  -> [String]
+    
+    /**
+     * Get the number of files in the archive
+     */
+    func fileCount()  -> UInt64
+    
+    /**
+     * List all files in the archive
+     */
+    func files()  -> [PublicArchiveFileEntry]
+    
+    /**
+     * Rename a file in the archive
+     */
+    func renameFile(oldPath: String, newPath: String) throws  -> PublicArchive
+    
+}
+
+/**
+ * A public archive containing files that can be accessed by anyone on the network.
+ */
+open class PublicArchive:
+    PublicArchiveProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_publicarchive(self.pointer, $0) }
+    }
+    /**
+     * Create a new empty public archive
+     */
+public convenience init() {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_publicarchive_new($0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_publicarchive(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Add a file to the archive
+     */
+open func addFile(path: String, address: DataAddress, metadata: Metadata) -> PublicArchive {
+    return try!  FfiConverterTypePublicArchive.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_publicarchive_add_file(self.uniffiClonePointer(),
+        FfiConverterString.lower(path),
+        FfiConverterTypeDataAddress.lower(address),
+        FfiConverterTypeMetadata.lower(metadata),$0
+    )
+})
+}
+    
+    /**
+     * Get all data addresses in the archive
+     */
+open func addresses() -> [String] {
+    return try!  FfiConverterSequenceString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_publicarchive_addresses(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the number of files in the archive
+     */
+open func fileCount() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_publicarchive_file_count(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * List all files in the archive
+     */
+open func files() -> [PublicArchiveFileEntry] {
+    return try!  FfiConverterSequenceTypePublicArchiveFileEntry.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_publicarchive_files(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Rename a file in the archive
+     */
+open func renameFile(oldPath: String, newPath: String)throws  -> PublicArchive {
+    return try  FfiConverterTypePublicArchive.lift(try rustCallWithError(FfiConverterTypeArchiveError.lift) {
+    uniffi_ant_ffi_fn_method_publicarchive_rename_file(self.uniffiClonePointer(),
+        FfiConverterString.lower(oldPath),
+        FfiConverterString.lower(newPath),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublicArchive: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PublicArchive
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PublicArchive {
+        return PublicArchive(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PublicArchive) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicArchive {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PublicArchive, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicArchive_lift(_ pointer: UnsafeMutableRawPointer) throws -> PublicArchive {
+    return try FfiConverterTypePublicArchive.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicArchive_lower(_ value: PublicArchive) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePublicArchive.lower(value)
+}
+
+
+
+
+/**
+ * BLS Public Key
+ */
+public protocol PublicKeyProtocol : AnyObject {
+    
+    /**
+     * Serialize to hex string
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * BLS Public Key
+ */
+open class PublicKey:
+    PublicKeyProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_publickey(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_publickey(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a PublicKey from hex string
+     */
+public static func fromHex(hex: String)throws  -> PublicKey {
+    return try  FfiConverterTypePublicKey.lift(try rustCallWithError(FfiConverterTypeKeyError.lift) {
+    uniffi_ant_ffi_fn_constructor_publickey_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Serialize to hex string
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_publickey_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublicKey: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = PublicKey
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> PublicKey {
+        return PublicKey(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: PublicKey) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicKey {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: PublicKey, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicKey_lift(_ pointer: UnsafeMutableRawPointer) throws -> PublicKey {
+    return try FfiConverterTypePublicKey.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicKey_lower(_ value: PublicKey) -> UnsafeMutableRawPointer {
+    return FfiConverterTypePublicKey.lower(value)
+}
+
+
+
+
+/**
+ * Address of a register on the network, derived from the owner's public key.
+ *
+ * Registers are mutable data structures that allow versioned updates.
+ * They are stored at an address derived from the owner's public key.
+ */
+public protocol RegisterAddressProtocol : AnyObject {
+    
+    /**
+     * Returns the owner's public key
+     */
+    func owner()  -> PublicKey
+    
+    /**
+     * Serialize to hex string
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * Address of a register on the network, derived from the owner's public key.
+ *
+ * Registers are mutable data structures that allow versioned updates.
+ * They are stored at an address derived from the owner's public key.
+ */
+open class RegisterAddress:
+    RegisterAddressProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_registeraddress(self.pointer, $0) }
+    }
+    /**
+     * Create a new RegisterAddress from a public key (owner)
+     */
+public convenience init(owner: PublicKey) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_registeraddress_new(
+        FfiConverterTypePublicKey.lower(owner),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_registeraddress(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a RegisterAddress from a hex string
+     */
+public static func fromHex(hex: String)throws  -> RegisterAddress {
+    return try  FfiConverterTypeRegisterAddress.lift(try rustCallWithError(FfiConverterTypeRegisterError.lift) {
+    uniffi_ant_ffi_fn_constructor_registeraddress_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the owner's public key
+     */
+open func owner() -> PublicKey {
+    return try!  FfiConverterTypePublicKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_registeraddress_owner(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Serialize to hex string
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_registeraddress_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRegisterAddress: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = RegisterAddress
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> RegisterAddress {
+        return RegisterAddress(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: RegisterAddress) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RegisterAddress {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: RegisterAddress, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRegisterAddress_lift(_ pointer: UnsafeMutableRawPointer) throws -> RegisterAddress {
+    return try FfiConverterTypeRegisterAddress.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRegisterAddress_lower(_ value: RegisterAddress) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeRegisterAddress.lower(value)
+}
+
+
+
+
+/**
+ * Scratchpad - encrypted mutable data with versioning
+ * Stored at the owner's public key address, only updatable by the owner
+ */
+public protocol ScratchpadProtocol : AnyObject {
+    
+    /**
+     * Get the network address where this scratchpad is stored
+     */
+    func address()  -> ScratchpadAddress
+    
+    /**
+     * Get the counter (version) of this scratchpad
+     * Higher counter means more recent version
+     */
+    func counter()  -> UInt64
+    
+    /**
+     * Get the data encoding type
+     */
+    func dataEncoding()  -> UInt64
+    
+    /**
+     * Decrypt the data using the owner's secret key
+     */
+    func decryptData(sk: SecretKey) throws  -> Data
+    
+    /**
+     * Get the encrypted data
+     */
+    func encryptedData()  -> Data
+    
+    /**
+     * Get the encrypted data hash as hex string
+     */
+    func encryptedDataHash()  -> String
+    
+    /**
+     * Get the owner's public key
+     */
+    func owner()  -> PublicKey
+    
+    /**
+     * Get the scratchpad hash as hex string
+     */
+    func scratchpadHash()  -> String
+    
+}
+
+/**
+ * Scratchpad - encrypted mutable data with versioning
+ * Stored at the owner's public key address, only updatable by the owner
+ */
+open class Scratchpad:
+    ScratchpadProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_scratchpad(self.pointer, $0) }
+    }
+    /**
+     * Create a new scratchpad with encrypted data
+     * The data is encrypted with the owner's key before storage
+     */
+public convenience init(owner: SecretKey, dataEncoding: UInt64, unencryptedData: Data, counter: UInt64) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_scratchpad_new(
+        FfiConverterTypeSecretKey.lower(owner),
+        FfiConverterUInt64.lower(dataEncoding),
+        FfiConverterData.lower(unencryptedData),
+        FfiConverterUInt64.lower(counter),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_scratchpad(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Get the network address where this scratchpad is stored
+     */
+open func address() -> ScratchpadAddress {
+    return try!  FfiConverterTypeScratchpadAddress.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_scratchpad_address(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the counter (version) of this scratchpad
+     * Higher counter means more recent version
+     */
+open func counter() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_scratchpad_counter(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the data encoding type
+     */
+open func dataEncoding() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_scratchpad_data_encoding(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Decrypt the data using the owner's secret key
+     */
+open func decryptData(sk: SecretKey)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeScratchpadError.lift) {
+    uniffi_ant_ffi_fn_method_scratchpad_decrypt_data(self.uniffiClonePointer(),
+        FfiConverterTypeSecretKey.lower(sk),$0
+    )
+})
+}
+    
+    /**
+     * Get the encrypted data
+     */
+open func encryptedData() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_scratchpad_encrypted_data(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the encrypted data hash as hex string
+     */
+open func encryptedDataHash() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_scratchpad_encrypted_data_hash(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the owner's public key
+     */
+open func owner() -> PublicKey {
+    return try!  FfiConverterTypePublicKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_scratchpad_owner(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Get the scratchpad hash as hex string
+     */
+open func scratchpadHash() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_scratchpad_scratchpad_hash(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScratchpad: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Scratchpad
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Scratchpad {
+        return Scratchpad(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Scratchpad) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Scratchpad {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Scratchpad, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScratchpad_lift(_ pointer: UnsafeMutableRawPointer) throws -> Scratchpad {
+    return try FfiConverterTypeScratchpad.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScratchpad_lower(_ value: Scratchpad) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeScratchpad.lower(value)
+}
+
+
+
+
+/**
+ * Address of a scratchpad on the network, derived from the owner's public key
+ */
+public protocol ScratchpadAddressProtocol : AnyObject {
+    
+    /**
+     * Returns the owner's public key
+     */
+    func owner()  -> PublicKey
+    
+    /**
+     * Serialize to hex string
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * Address of a scratchpad on the network, derived from the owner's public key
+ */
+open class ScratchpadAddress:
+    ScratchpadAddressProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_scratchpadaddress(self.pointer, $0) }
+    }
+    /**
+     * Create a new ScratchpadAddress from a public key (owner)
+     */
+public convenience init(publicKey: PublicKey) {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_scratchpadaddress_new(
+        FfiConverterTypePublicKey.lower(publicKey),$0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_scratchpadaddress(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a ScratchpadAddress from a hex string
+     */
+public static func fromHex(hex: String)throws  -> ScratchpadAddress {
+    return try  FfiConverterTypeScratchpadAddress.lift(try rustCallWithError(FfiConverterTypeScratchpadError.lift) {
+    uniffi_ant_ffi_fn_constructor_scratchpadaddress_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the owner's public key
+     */
+open func owner() -> PublicKey {
+    return try!  FfiConverterTypePublicKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_scratchpadaddress_owner(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Serialize to hex string
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_scratchpadaddress_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScratchpadAddress: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = ScratchpadAddress
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> ScratchpadAddress {
+        return ScratchpadAddress(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: ScratchpadAddress) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScratchpadAddress {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: ScratchpadAddress, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScratchpadAddress_lift(_ pointer: UnsafeMutableRawPointer) throws -> ScratchpadAddress {
+    return try FfiConverterTypeScratchpadAddress.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScratchpadAddress_lower(_ value: ScratchpadAddress) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeScratchpadAddress.lower(value)
+}
+
+
+
+
+/**
+ * BLS Secret Key for signing operations
+ */
+public protocol SecretKeyProtocol : AnyObject {
+    
+    /**
+     * Get the public key corresponding to this secret key
+     */
+    func publicKey()  -> PublicKey
+    
+    /**
+     * Serialize to hex string
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * BLS Secret Key for signing operations
+ */
+open class SecretKey:
+    SecretKeyProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_secretkey(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_secretkey(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a SecretKey from hex string
+     */
+public static func fromHex(hex: String)throws  -> SecretKey {
+    return try  FfiConverterTypeSecretKey.lift(try rustCallWithError(FfiConverterTypeKeyError.lift) {
+    uniffi_ant_ffi_fn_constructor_secretkey_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+    /**
+     * Generate a random secret key
+     */
+public static func random() -> SecretKey {
+    return try!  FfiConverterTypeSecretKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_secretkey_random($0
+    )
+})
+}
+    
+
+    
+    /**
+     * Get the public key corresponding to this secret key
+     */
+open func publicKey() -> PublicKey {
+    return try!  FfiConverterTypePublicKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_secretkey_public_key(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Serialize to hex string
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_secretkey_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSecretKey: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = SecretKey
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> SecretKey {
+        return SecretKey(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: SecretKey) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SecretKey {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: SecretKey, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretKey_lift(_ pointer: UnsafeMutableRawPointer) throws -> SecretKey {
+    return try FfiConverterTypeSecretKey.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSecretKey_lower(_ value: SecretKey) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeSecretKey.lower(value)
+}
+
+
+
+
+/**
+ * BLS Signature
+ */
+public protocol SignatureProtocol : AnyObject {
+    
+    /**
+     * Returns `true` if the signature contains an odd number of ones
+     */
+    func parity()  -> Bool
+    
+    /**
+     * Returns the bytes representation of the signature
+     */
+    func toBytes()  -> Data
+    
+    /**
+     * Returns the hex representation of the signature
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * BLS Signature
+ */
+open class Signature:
+    SignatureProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_signature(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_signature(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a signature from raw bytes (96 bytes for BLS signatures)
+     */
+public static func fromBytes(bytes: Data)throws  -> Signature {
+    return try  FfiConverterTypeSignature.lift(try rustCallWithError(FfiConverterTypeKeyError.lift) {
+    uniffi_ant_ffi_fn_constructor_signature_from_bytes(
+        FfiConverterData.lower(bytes),$0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns `true` if the signature contains an odd number of ones
+     */
+open func parity() -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_signature_parity(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the bytes representation of the signature
+     */
+open func toBytes() -> Data {
+    return try!  FfiConverterData.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_signature_to_bytes(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns the hex representation of the signature
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_signature_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeSignature: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = Signature
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Signature {
+        return Signature(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: Signature) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Signature {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: Signature, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignature_lift(_ pointer: UnsafeMutableRawPointer) throws -> Signature {
+    return try FfiConverterTypeSignature.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeSignature_lower(_ value: Signature) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeSignature.lower(value)
+}
+
+
+
+
+/**
+ * UserData stored in Vaults containing references to user's file archives.
+ *
+ * This allows users to keep track of only the key to their User Data Vault
+ * while having the rest kept on the Network encrypted in a Vault for them.
+ * Using User Data Vault is optional - one can decide to keep all their data locally instead.
+ */
+public protocol UserDataProtocol : AnyObject {
+    
+    /**
+     * Returns a list of public file archives as (address, name) pairs
+     */
+    func fileArchives()  -> [FileArchiveEntry]
+    
+    /**
+     * Returns a list of private file archives as (data_map, name) pairs
+     */
+    func privateFileArchives()  -> [PrivateFileArchiveEntry]
+    
+}
+
+/**
+ * UserData stored in Vaults containing references to user's file archives.
+ *
+ * This allows users to keep track of only the key to their User Data Vault
+ * while having the rest kept on the Network encrypted in a Vault for them.
+ * Using User Data Vault is optional - one can decide to keep all their data locally instead.
+ */
+open class UserData:
+    UserDataProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_userdata(self.pointer, $0) }
+    }
+    /**
+     * Creates a new empty UserData instance
+     */
+public convenience init() {
+    let pointer =
+        try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_userdata_new($0
+    )
+}
+    self.init(unsafeFromRawPointer: pointer)
+}
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_userdata(pointer, $0) }
+    }
+
+    
+
+    
+    /**
+     * Returns a list of public file archives as (address, name) pairs
+     */
+open func fileArchives() -> [FileArchiveEntry] {
+    return try!  FfiConverterSequenceTypeFileArchiveEntry.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_userdata_file_archives(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Returns a list of private file archives as (data_map, name) pairs
+     */
+open func privateFileArchives() -> [PrivateFileArchiveEntry] {
+    return try!  FfiConverterSequenceTypePrivateFileArchiveEntry.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_userdata_private_file_archives(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeUserData: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = UserData
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> UserData {
+        return UserData(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: UserData) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UserData {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: UserData, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserData_lift(_ pointer: UnsafeMutableRawPointer) throws -> UserData {
+    return try FfiConverterTypeUserData.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeUserData_lower(_ value: UserData) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeUserData.lower(value)
+}
+
+
+
+
+/**
+ * A secret key used to encrypt and decrypt vault data.
+ *
+ * Vaults are encrypted storage containers identified by this key.
+ * Keep this key safe - losing it means losing access to the vault data.
+ */
+public protocol VaultSecretKeyProtocol : AnyObject {
+    
+    /**
+     * Returns the hex string representation of the vault secret key
+     */
+    func toHex()  -> String
+    
+}
+
+/**
+ * A secret key used to encrypt and decrypt vault data.
+ *
+ * Vaults are encrypted storage containers identified by this key.
+ * Keep this key safe - losing it means losing access to the vault data.
+ */
+open class VaultSecretKey:
+    VaultSecretKeyProtocol {
+    fileprivate let pointer: UnsafeMutableRawPointer!
+
+    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoPointer {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
+        self.pointer = pointer
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noPointer: NoPointer) {
+        self.pointer = nil
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
+        return try! rustCall { uniffi_ant_ffi_fn_clone_vaultsecretkey(self.pointer, $0) }
+    }
+    // No primary constructor declared for this class.
+
+    deinit {
+        guard let pointer = pointer else {
+            return
+        }
+
+        try! rustCall { uniffi_ant_ffi_fn_free_vaultsecretkey(pointer, $0) }
+    }
+
+    
+    /**
+     * Create a VaultSecretKey from a hex string
+     */
+public static func fromHex(hex: String)throws  -> VaultSecretKey {
+    return try  FfiConverterTypeVaultSecretKey.lift(try rustCallWithError(FfiConverterTypeVaultError.lift) {
+    uniffi_ant_ffi_fn_constructor_vaultsecretkey_from_hex(
+        FfiConverterString.lower(hex),$0
+    )
+})
+}
+    
+    /**
+     * Creates a new random vault secret key
+     */
+public static func random() -> VaultSecretKey {
+    return try!  FfiConverterTypeVaultSecretKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_constructor_vaultsecretkey_random($0
+    )
+})
+}
+    
+
+    
+    /**
+     * Returns the hex string representation of the vault secret key
+     */
+open func toHex() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_method_vaultsecretkey_to_hex(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVaultSecretKey: FfiConverter {
+
+    typealias FfiType = UnsafeMutableRawPointer
+    typealias SwiftType = VaultSecretKey
+
+    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> VaultSecretKey {
+        return VaultSecretKey(unsafeFromRawPointer: pointer)
+    }
+
+    public static func lower(_ value: VaultSecretKey) -> UnsafeMutableRawPointer {
+        return value.uniffiClonePointer()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VaultSecretKey {
+        let v: UInt64 = try readInt(&buf)
+        // The Rust code won't compile if a pointer won't fit in a UInt64.
+        // We have to go via `UInt` because that's the thing that's the size of a pointer.
+        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
+        if (ptr == nil) {
+            throw UniffiInternalError.unexpectedNullPointer
+        }
+        return try lift(ptr!)
+    }
+
+    public static func write(_ value: VaultSecretKey, into buf: inout [UInt8]) {
+        // This fiddling is because `Int` is the thing that's the same size as a pointer.
+        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
+        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+    }
+}
+
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVaultSecretKey_lift(_ pointer: UnsafeMutableRawPointer) throws -> VaultSecretKey {
+    return try FfiConverterTypeVaultSecretKey.lift(pointer)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVaultSecretKey_lower(_ value: VaultSecretKey) -> UnsafeMutableRawPointer {
+    return FfiConverterTypeVaultSecretKey.lower(value)
 }
 
 
@@ -992,6 +7496,321 @@ public func FfiConverterTypeWallet_lower(_ value: Wallet) -> UnsafeMutableRawPoi
 
 
 /**
+ * Result of uploading a chunk to the network
+ */
+public struct ChunkPutResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The address where the chunk was stored
+     */
+    public var address: ChunkAddress
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The address where the chunk was stored
+         */address: ChunkAddress) {
+        self.cost = cost
+        self.address = address
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeChunkPutResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ChunkPutResult {
+        return
+            try ChunkPutResult(
+                cost: FfiConverterString.read(from: &buf), 
+                address: FfiConverterTypeChunkAddress.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ChunkPutResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeChunkAddress.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChunkPutResult_lift(_ buf: RustBuffer) throws -> ChunkPutResult {
+    return try FfiConverterTypeChunkPutResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeChunkPutResult_lower(_ value: ChunkPutResult) -> RustBuffer {
+    return FfiConverterTypeChunkPutResult.lower(value)
+}
+
+
+/**
+ * Result of uploading private data to the network
+ */
+public struct DataPutResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The data map chunk containing metadata to retrieve the data
+     */
+    public var dataMap: DataMapChunk
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The data map chunk containing metadata to retrieve the data
+         */dataMap: DataMapChunk) {
+        self.cost = cost
+        self.dataMap = dataMap
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDataPutResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DataPutResult {
+        return
+            try DataPutResult(
+                cost: FfiConverterString.read(from: &buf), 
+                dataMap: FfiConverterTypeDataMapChunk.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DataPutResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeDataMapChunk.write(value.dataMap, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataPutResult_lift(_ buf: RustBuffer) throws -> DataPutResult {
+    return try FfiConverterTypeDataPutResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDataPutResult_lower(_ value: DataPutResult) -> RustBuffer {
+    return FfiConverterTypeDataPutResult.lower(value)
+}
+
+
+/**
+ * Result of uploading directory content (without uploading archive)
+ */
+public struct DirContentUploadResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The archive containing file references (not uploaded)
+     */
+    public var archive: PrivateArchive
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The archive containing file references (not uploaded)
+         */archive: PrivateArchive) {
+        self.cost = cost
+        self.archive = archive
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDirContentUploadResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DirContentUploadResult {
+        return
+            try DirContentUploadResult(
+                cost: FfiConverterString.read(from: &buf), 
+                archive: FfiConverterTypePrivateArchive.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DirContentUploadResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypePrivateArchive.write(value.archive, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDirContentUploadResult_lift(_ buf: RustBuffer) throws -> DirContentUploadResult {
+    return try FfiConverterTypeDirContentUploadResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDirContentUploadResult_lower(_ value: DirContentUploadResult) -> RustBuffer {
+    return FfiConverterTypeDirContentUploadResult.lower(value)
+}
+
+
+/**
+ * Result of uploading a public directory to the network
+ */
+public struct DirUploadPublicResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The address where the directory archive was stored
+     */
+    public var address: ArchiveAddress
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The address where the directory archive was stored
+         */address: ArchiveAddress) {
+        self.cost = cost
+        self.address = address
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDirUploadPublicResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DirUploadPublicResult {
+        return
+            try DirUploadPublicResult(
+                cost: FfiConverterString.read(from: &buf), 
+                address: FfiConverterTypeArchiveAddress.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DirUploadPublicResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeArchiveAddress.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDirUploadPublicResult_lift(_ buf: RustBuffer) throws -> DirUploadPublicResult {
+    return try FfiConverterTypeDirUploadPublicResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDirUploadPublicResult_lower(_ value: DirUploadPublicResult) -> RustBuffer {
+    return FfiConverterTypeDirUploadPublicResult.lower(value)
+}
+
+
+/**
+ * Result of uploading a directory to the network (private)
+ */
+public struct DirUploadResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The data map to retrieve the directory archive
+     */
+    public var dataMap: PrivateArchiveDataMap
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The data map to retrieve the directory archive
+         */dataMap: PrivateArchiveDataMap) {
+        self.cost = cost
+        self.dataMap = dataMap
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDirUploadResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DirUploadResult {
+        return
+            try DirUploadResult(
+                cost: FfiConverterString.read(from: &buf), 
+                dataMap: FfiConverterTypePrivateArchiveDataMap.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: DirUploadResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypePrivateArchiveDataMap.write(value.dataMap, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDirUploadResult_lift(_ buf: RustBuffer) throws -> DirUploadResult {
+    return try FfiConverterTypeDirUploadResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDirUploadResult_lower(_ value: DirUploadResult) -> RustBuffer {
+    return FfiConverterTypeDirUploadResult.lower(value)
+}
+
+
+/**
  * Represents encrypted data with a datamap chunk and content chunks
  */
 public struct EncryptedData {
@@ -1069,6 +7888,869 @@ public func FfiConverterTypeEncryptedData_lift(_ buf: RustBuffer) throws -> Encr
 #endif
 public func FfiConverterTypeEncryptedData_lower(_ value: EncryptedData) -> RustBuffer {
     return FfiConverterTypeEncryptedData.lower(value)
+}
+
+
+/**
+ * A file archive entry with address and name
+ */
+public struct FileArchiveEntry {
+    /**
+     * The hex-encoded address of the archive
+     */
+    public var address: String
+    /**
+     * The user-defined name for this archive
+     */
+    public var name: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The hex-encoded address of the archive
+         */address: String, 
+        /**
+         * The user-defined name for this archive
+         */name: String) {
+        self.address = address
+        self.name = name
+    }
+}
+
+
+
+extension FileArchiveEntry: Equatable, Hashable {
+    public static func ==(lhs: FileArchiveEntry, rhs: FileArchiveEntry) -> Bool {
+        if lhs.address != rhs.address {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(address)
+        hasher.combine(name)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFileArchiveEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FileArchiveEntry {
+        return
+            try FileArchiveEntry(
+                address: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FileArchiveEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.address, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFileArchiveEntry_lift(_ buf: RustBuffer) throws -> FileArchiveEntry {
+    return try FfiConverterTypeFileArchiveEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFileArchiveEntry_lower(_ value: FileArchiveEntry) -> RustBuffer {
+    return FfiConverterTypeFileArchiveEntry.lower(value)
+}
+
+
+/**
+ * Result of uploading a file to the network (public)
+ */
+public struct FileUploadPublicResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The address where the file was stored
+     */
+    public var address: DataAddress
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The address where the file was stored
+         */address: DataAddress) {
+        self.cost = cost
+        self.address = address
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFileUploadPublicResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FileUploadPublicResult {
+        return
+            try FileUploadPublicResult(
+                cost: FfiConverterString.read(from: &buf), 
+                address: FfiConverterTypeDataAddress.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FileUploadPublicResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeDataAddress.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFileUploadPublicResult_lift(_ buf: RustBuffer) throws -> FileUploadPublicResult {
+    return try FfiConverterTypeFileUploadPublicResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFileUploadPublicResult_lower(_ value: FileUploadPublicResult) -> RustBuffer {
+    return FfiConverterTypeFileUploadPublicResult.lower(value)
+}
+
+
+/**
+ * Result of uploading a file to the network (private)
+ */
+public struct FileUploadResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The data map to retrieve the file
+     */
+    public var dataMap: DataMapChunk
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The data map to retrieve the file
+         */dataMap: DataMapChunk) {
+        self.cost = cost
+        self.dataMap = dataMap
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFileUploadResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> FileUploadResult {
+        return
+            try FileUploadResult(
+                cost: FfiConverterString.read(from: &buf), 
+                dataMap: FfiConverterTypeDataMapChunk.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: FileUploadResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeDataMapChunk.write(value.dataMap, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFileUploadResult_lift(_ buf: RustBuffer) throws -> FileUploadResult {
+    return try FfiConverterTypeFileUploadResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFileUploadResult_lower(_ value: FileUploadResult) -> RustBuffer {
+    return FfiConverterTypeFileUploadResult.lower(value)
+}
+
+
+/**
+ * A parent or descendant reference in a graph entry
+ */
+public struct GraphDescendant {
+    public var publicKey: PublicKey
+    public var content: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(publicKey: PublicKey, content: Data) {
+        self.publicKey = publicKey
+        self.content = content
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGraphDescendant: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GraphDescendant {
+        return
+            try GraphDescendant(
+                publicKey: FfiConverterTypePublicKey.read(from: &buf), 
+                content: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GraphDescendant, into buf: inout [UInt8]) {
+        FfiConverterTypePublicKey.write(value.publicKey, into: &buf)
+        FfiConverterData.write(value.content, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGraphDescendant_lift(_ buf: RustBuffer) throws -> GraphDescendant {
+    return try FfiConverterTypeGraphDescendant.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGraphDescendant_lower(_ value: GraphDescendant) -> RustBuffer {
+    return FfiConverterTypeGraphDescendant.lower(value)
+}
+
+
+/**
+ * Result of uploading a graph entry to the network
+ */
+public struct GraphEntryPutResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The address where the graph entry was stored
+     */
+    public var address: GraphEntryAddress
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The address where the graph entry was stored
+         */address: GraphEntryAddress) {
+        self.cost = cost
+        self.address = address
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGraphEntryPutResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GraphEntryPutResult {
+        return
+            try GraphEntryPutResult(
+                cost: FfiConverterString.read(from: &buf), 
+                address: FfiConverterTypeGraphEntryAddress.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: GraphEntryPutResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeGraphEntryAddress.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGraphEntryPutResult_lift(_ buf: RustBuffer) throws -> GraphEntryPutResult {
+    return try FfiConverterTypeGraphEntryPutResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeGraphEntryPutResult_lower(_ value: GraphEntryPutResult) -> RustBuffer {
+    return FfiConverterTypeGraphEntryPutResult.lower(value)
+}
+
+
+/**
+ * Result of creating a pointer on the network
+ */
+public struct PointerCreateResult {
+    /**
+     * The cost paid for creating the pointer in tokens
+     */
+    public var cost: String
+    /**
+     * The address where the pointer was stored
+     */
+    public var address: PointerAddress
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for creating the pointer in tokens
+         */cost: String, 
+        /**
+         * The address where the pointer was stored
+         */address: PointerAddress) {
+        self.cost = cost
+        self.address = address
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePointerCreateResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PointerCreateResult {
+        return
+            try PointerCreateResult(
+                cost: FfiConverterString.read(from: &buf), 
+                address: FfiConverterTypePointerAddress.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PointerCreateResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypePointerAddress.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePointerCreateResult_lift(_ buf: RustBuffer) throws -> PointerCreateResult {
+    return try FfiConverterTypePointerCreateResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePointerCreateResult_lower(_ value: PointerCreateResult) -> RustBuffer {
+    return FfiConverterTypePointerCreateResult.lower(value)
+}
+
+
+/**
+ * A file entry in a private archive
+ */
+public struct PrivateArchiveFileEntry {
+    /**
+     * The path of the file in the archive
+     */
+    public var path: String
+    /**
+     * The data map chunk to retrieve the file content
+     */
+    public var dataMap: DataMapChunk
+    /**
+     * Metadata about the file
+     */
+    public var metadata: Metadata
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The path of the file in the archive
+         */path: String, 
+        /**
+         * The data map chunk to retrieve the file content
+         */dataMap: DataMapChunk, 
+        /**
+         * Metadata about the file
+         */metadata: Metadata) {
+        self.path = path
+        self.dataMap = dataMap
+        self.metadata = metadata
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrivateArchiveFileEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrivateArchiveFileEntry {
+        return
+            try PrivateArchiveFileEntry(
+                path: FfiConverterString.read(from: &buf), 
+                dataMap: FfiConverterTypeDataMapChunk.read(from: &buf), 
+                metadata: FfiConverterTypeMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PrivateArchiveFileEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.path, into: &buf)
+        FfiConverterTypeDataMapChunk.write(value.dataMap, into: &buf)
+        FfiConverterTypeMetadata.write(value.metadata, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateArchiveFileEntry_lift(_ buf: RustBuffer) throws -> PrivateArchiveFileEntry {
+    return try FfiConverterTypePrivateArchiveFileEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateArchiveFileEntry_lower(_ value: PrivateArchiveFileEntry) -> RustBuffer {
+    return FfiConverterTypePrivateArchiveFileEntry.lower(value)
+}
+
+
+/**
+ * Result of uploading a private archive to the network
+ */
+public struct PrivateArchivePutResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The data map to retrieve the archive
+     */
+    public var dataMap: DataMapChunk
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The data map to retrieve the archive
+         */dataMap: DataMapChunk) {
+        self.cost = cost
+        self.dataMap = dataMap
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrivateArchivePutResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrivateArchivePutResult {
+        return
+            try PrivateArchivePutResult(
+                cost: FfiConverterString.read(from: &buf), 
+                dataMap: FfiConverterTypeDataMapChunk.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PrivateArchivePutResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeDataMapChunk.write(value.dataMap, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateArchivePutResult_lift(_ buf: RustBuffer) throws -> PrivateArchivePutResult {
+    return try FfiConverterTypePrivateArchivePutResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateArchivePutResult_lower(_ value: PrivateArchivePutResult) -> RustBuffer {
+    return FfiConverterTypePrivateArchivePutResult.lower(value)
+}
+
+
+/**
+ * A private file archive entry with data map and name
+ */
+public struct PrivateFileArchiveEntry {
+    /**
+     * The hex-encoded data map for the private archive
+     */
+    public var dataMap: String
+    /**
+     * The user-defined name for this archive
+     */
+    public var name: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The hex-encoded data map for the private archive
+         */dataMap: String, 
+        /**
+         * The user-defined name for this archive
+         */name: String) {
+        self.dataMap = dataMap
+        self.name = name
+    }
+}
+
+
+
+extension PrivateFileArchiveEntry: Equatable, Hashable {
+    public static func ==(lhs: PrivateFileArchiveEntry, rhs: PrivateFileArchiveEntry) -> Bool {
+        if lhs.dataMap != rhs.dataMap {
+            return false
+        }
+        if lhs.name != rhs.name {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(dataMap)
+        hasher.combine(name)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePrivateFileArchiveEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PrivateFileArchiveEntry {
+        return
+            try PrivateFileArchiveEntry(
+                dataMap: FfiConverterString.read(from: &buf), 
+                name: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PrivateFileArchiveEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.dataMap, into: &buf)
+        FfiConverterString.write(value.name, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateFileArchiveEntry_lift(_ buf: RustBuffer) throws -> PrivateFileArchiveEntry {
+    return try FfiConverterTypePrivateFileArchiveEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePrivateFileArchiveEntry_lower(_ value: PrivateFileArchiveEntry) -> RustBuffer {
+    return FfiConverterTypePrivateFileArchiveEntry.lower(value)
+}
+
+
+/**
+ * A file entry in a public archive
+ */
+public struct PublicArchiveFileEntry {
+    /**
+     * The path of the file in the archive
+     */
+    public var path: String
+    /**
+     * The data address where the file content is stored
+     */
+    public var address: DataAddress
+    /**
+     * Metadata about the file
+     */
+    public var metadata: Metadata
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The path of the file in the archive
+         */path: String, 
+        /**
+         * The data address where the file content is stored
+         */address: DataAddress, 
+        /**
+         * Metadata about the file
+         */metadata: Metadata) {
+        self.path = path
+        self.address = address
+        self.metadata = metadata
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublicArchiveFileEntry: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicArchiveFileEntry {
+        return
+            try PublicArchiveFileEntry(
+                path: FfiConverterString.read(from: &buf), 
+                address: FfiConverterTypeDataAddress.read(from: &buf), 
+                metadata: FfiConverterTypeMetadata.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublicArchiveFileEntry, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.path, into: &buf)
+        FfiConverterTypeDataAddress.write(value.address, into: &buf)
+        FfiConverterTypeMetadata.write(value.metadata, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicArchiveFileEntry_lift(_ buf: RustBuffer) throws -> PublicArchiveFileEntry {
+    return try FfiConverterTypePublicArchiveFileEntry.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicArchiveFileEntry_lower(_ value: PublicArchiveFileEntry) -> RustBuffer {
+    return FfiConverterTypePublicArchiveFileEntry.lower(value)
+}
+
+
+/**
+ * Result of uploading a public archive to the network
+ */
+public struct PublicArchivePutResult {
+    /**
+     * The cost paid for the upload in tokens
+     */
+    public var cost: String
+    /**
+     * The address where the archive was stored
+     */
+    public var address: ArchiveAddress
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for the upload in tokens
+         */cost: String, 
+        /**
+         * The address where the archive was stored
+         */address: ArchiveAddress) {
+        self.cost = cost
+        self.address = address
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePublicArchivePutResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PublicArchivePutResult {
+        return
+            try PublicArchivePutResult(
+                cost: FfiConverterString.read(from: &buf), 
+                address: FfiConverterTypeArchiveAddress.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PublicArchivePutResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeArchiveAddress.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicArchivePutResult_lift(_ buf: RustBuffer) throws -> PublicArchivePutResult {
+    return try FfiConverterTypePublicArchivePutResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePublicArchivePutResult_lower(_ value: PublicArchivePutResult) -> RustBuffer {
+    return FfiConverterTypePublicArchivePutResult.lower(value)
+}
+
+
+/**
+ * Result of creating a register on the network
+ */
+public struct RegisterCreateResult {
+    /**
+     * The cost paid for creating the register in tokens
+     */
+    public var cost: String
+    /**
+     * The address where the register was stored
+     */
+    public var address: RegisterAddress
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for creating the register in tokens
+         */cost: String, 
+        /**
+         * The address where the register was stored
+         */address: RegisterAddress) {
+        self.cost = cost
+        self.address = address
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRegisterCreateResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RegisterCreateResult {
+        return
+            try RegisterCreateResult(
+                cost: FfiConverterString.read(from: &buf), 
+                address: FfiConverterTypeRegisterAddress.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RegisterCreateResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeRegisterAddress.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRegisterCreateResult_lift(_ buf: RustBuffer) throws -> RegisterCreateResult {
+    return try FfiConverterTypeRegisterCreateResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRegisterCreateResult_lower(_ value: RegisterCreateResult) -> RustBuffer {
+    return FfiConverterTypeRegisterCreateResult.lower(value)
+}
+
+
+/**
+ * Result of creating a scratchpad on the network
+ */
+public struct ScratchpadCreateResult {
+    /**
+     * The cost paid for creating the scratchpad in tokens
+     */
+    public var cost: String
+    /**
+     * The address where the scratchpad was stored
+     */
+    public var address: ScratchpadAddress
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The cost paid for creating the scratchpad in tokens
+         */cost: String, 
+        /**
+         * The address where the scratchpad was stored
+         */address: ScratchpadAddress) {
+        self.cost = cost
+        self.address = address
+    }
+}
+
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScratchpadCreateResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScratchpadCreateResult {
+        return
+            try ScratchpadCreateResult(
+                cost: FfiConverterString.read(from: &buf), 
+                address: FfiConverterTypeScratchpadAddress.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: ScratchpadCreateResult, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.cost, into: &buf)
+        FfiConverterTypeScratchpadAddress.write(value.address, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScratchpadCreateResult_lift(_ buf: RustBuffer) throws -> ScratchpadCreateResult {
+    return try FfiConverterTypeScratchpadCreateResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeScratchpadCreateResult_lower(_ value: ScratchpadCreateResult) -> RustBuffer {
+    return FfiConverterTypeScratchpadCreateResult.lower(value)
 }
 
 
@@ -1154,6 +8836,165 @@ public func FfiConverterTypeUploadResult_lower(_ value: UploadResult) -> RustBuf
 
 
 /**
+ * Result of fetching vault data
+ */
+public struct VaultGetResult {
+    /**
+     * The decrypted vault data
+     */
+    public var data: Data
+    /**
+     * The content type identifier (app-specific)
+     */
+    public var contentType: UInt64
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * The decrypted vault data
+         */data: Data, 
+        /**
+         * The content type identifier (app-specific)
+         */contentType: UInt64) {
+        self.data = data
+        self.contentType = contentType
+    }
+}
+
+
+
+extension VaultGetResult: Equatable, Hashable {
+    public static func ==(lhs: VaultGetResult, rhs: VaultGetResult) -> Bool {
+        if lhs.data != rhs.data {
+            return false
+        }
+        if lhs.contentType != rhs.contentType {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(data)
+        hasher.combine(contentType)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVaultGetResult: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VaultGetResult {
+        return
+            try VaultGetResult(
+                data: FfiConverterData.read(from: &buf), 
+                contentType: FfiConverterUInt64.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: VaultGetResult, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.data, into: &buf)
+        FfiConverterUInt64.write(value.contentType, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVaultGetResult_lift(_ buf: RustBuffer) throws -> VaultGetResult {
+    return try FfiConverterTypeVaultGetResult.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeVaultGetResult_lower(_ value: VaultGetResult) -> RustBuffer {
+    return FfiConverterTypeVaultGetResult.lower(value)
+}
+
+
+/**
+ * Error type for archive operations
+ */
+public enum ArchiveError {
+
+    
+    
+    case InvalidArchive(reason: String
+    )
+    case ParsingFailed(reason: String
+    )
+    case FileNotFound(path: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeArchiveError: FfiConverterRustBuffer {
+    typealias SwiftType = ArchiveError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ArchiveError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .InvalidArchive(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .ParsingFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .FileNotFound(
+            path: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ArchiveError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .InvalidArchive(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .ParsingFailed(reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .FileNotFound(path):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(path, into: &buf)
+            
+        }
+    }
+}
+
+
+extension ArchiveError: Equatable, Hashable {}
+
+extension ArchiveError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
  * Error type for Autonomi Client operations
  */
 public enum ClientError {
@@ -1232,6 +9073,74 @@ extension ClientError: Foundation.LocalizedError {
 
 
 /**
+ * Error type for data operations
+ */
+public enum DataError {
+
+    
+    
+    case InvalidData(reason: String
+    )
+    case ParsingFailed(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDataError: FfiConverterRustBuffer {
+    typealias SwiftType = DataError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> DataError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .InvalidData(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .ParsingFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: DataError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .InvalidData(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .ParsingFailed(reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+extension DataError: Equatable, Hashable {}
+
+extension DataError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
  * Error type for encryption/decryption operations
  */
 public enum EncryptionError {
@@ -1283,6 +9192,142 @@ public struct FfiConverterTypeEncryptionError: FfiConverterRustBuffer {
 extension EncryptionError: Equatable, Hashable {}
 
 extension EncryptionError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
+ * Errors that can occur when working with graph entries
+ */
+public enum GraphEntryError {
+
+    
+    
+    case InvalidContent(reason: String
+    )
+    case ParsingFailed(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeGraphEntryError: FfiConverterRustBuffer {
+    typealias SwiftType = GraphEntryError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> GraphEntryError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .InvalidContent(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .ParsingFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: GraphEntryError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .InvalidContent(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .ParsingFailed(reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+extension GraphEntryError: Equatable, Hashable {}
+
+extension GraphEntryError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
+ * Error type for key operations
+ */
+public enum KeyError {
+
+    
+    
+    case InvalidKey(reason: String
+    )
+    case ParsingFailed(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeKeyError: FfiConverterRustBuffer {
+    typealias SwiftType = KeyError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> KeyError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .InvalidKey(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .ParsingFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: KeyError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .InvalidKey(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .ParsingFailed(reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+extension KeyError: Equatable, Hashable {}
+
+extension KeyError: Foundation.LocalizedError {
     public var errorDescription: String? {
         String(reflecting: self)
     }
@@ -1411,6 +9456,288 @@ public func FfiConverterTypePaymentOption_lower(_ value: PaymentOption) -> RustB
 
 
 /**
+ * Error type for pointer operations
+ */
+public enum PointerError {
+
+    
+    
+    case InvalidPointer(reason: String
+    )
+    case ParsingFailed(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePointerError: FfiConverterRustBuffer {
+    typealias SwiftType = PointerError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PointerError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .InvalidPointer(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .ParsingFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: PointerError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .InvalidPointer(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .ParsingFailed(reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+extension PointerError: Equatable, Hashable {}
+
+extension PointerError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
+ * Error type for register operations
+ */
+public enum RegisterError {
+
+    
+    
+    case InvalidRegister(reason: String
+    )
+    case ParsingFailed(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRegisterError: FfiConverterRustBuffer {
+    typealias SwiftType = RegisterError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RegisterError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .InvalidRegister(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .ParsingFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: RegisterError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .InvalidRegister(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .ParsingFailed(reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+extension RegisterError: Equatable, Hashable {}
+
+extension RegisterError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
+ * Error type for scratchpad operations
+ */
+public enum ScratchpadError {
+
+    
+    
+    case InvalidScratchpad(reason: String
+    )
+    case ParsingFailed(reason: String
+    )
+    case DecryptionFailed(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeScratchpadError: FfiConverterRustBuffer {
+    typealias SwiftType = ScratchpadError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ScratchpadError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .InvalidScratchpad(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .ParsingFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 3: return .DecryptionFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: ScratchpadError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .InvalidScratchpad(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .ParsingFailed(reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .DecryptionFailed(reason):
+            writeInt(&buf, Int32(3))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+extension ScratchpadError: Equatable, Hashable {}
+
+extension ScratchpadError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
+ * Error type for vault operations
+ */
+public enum VaultError {
+
+    
+    
+    case InvalidKey(reason: String
+    )
+    case ParsingFailed(reason: String
+    )
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeVaultError: FfiConverterRustBuffer {
+    typealias SwiftType = VaultError
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> VaultError {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        
+
+        
+        case 1: return .InvalidKey(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+        case 2: return .ParsingFailed(
+            reason: try FfiConverterString.read(from: &buf)
+            )
+
+         default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: VaultError, into buf: inout [UInt8]) {
+        switch value {
+
+        
+
+        
+        
+        case let .InvalidKey(reason):
+            writeInt(&buf, Int32(1))
+            FfiConverterString.write(reason, into: &buf)
+            
+        
+        case let .ParsingFailed(reason):
+            writeInt(&buf, Int32(2))
+            FfiConverterString.write(reason, into: &buf)
+            
+        }
+    }
+}
+
+
+extension VaultError: Equatable, Hashable {}
+
+extension VaultError: Foundation.LocalizedError {
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+}
+
+
+/**
  * Error type for Wallet operations
  */
 public enum WalletError {
@@ -1480,6 +9807,79 @@ extension WalletError: Foundation.LocalizedError {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
+    typealias SwiftType = String?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterString.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterString.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionData: FfiConverterRustBuffer {
+    typealias SwiftType = Data?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterData.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterData.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
     typealias SwiftType = [Data]
 
@@ -1497,6 +9897,181 @@ fileprivate struct FfiConverterSequenceData: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterData.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeDataMapChunk: FfiConverterRustBuffer {
+    typealias SwiftType = [DataMapChunk]
+
+    public static func write(_ value: [DataMapChunk], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeDataMapChunk.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [DataMapChunk] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [DataMapChunk]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeDataMapChunk.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePublicKey: FfiConverterRustBuffer {
+    typealias SwiftType = [PublicKey]
+
+    public static func write(_ value: [PublicKey], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePublicKey.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PublicKey] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PublicKey]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePublicKey.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeFileArchiveEntry: FfiConverterRustBuffer {
+    typealias SwiftType = [FileArchiveEntry]
+
+    public static func write(_ value: [FileArchiveEntry], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeFileArchiveEntry.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [FileArchiveEntry] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [FileArchiveEntry]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeFileArchiveEntry.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeGraphDescendant: FfiConverterRustBuffer {
+    typealias SwiftType = [GraphDescendant]
+
+    public static func write(_ value: [GraphDescendant], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeGraphDescendant.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [GraphDescendant] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [GraphDescendant]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeGraphDescendant.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePrivateArchiveFileEntry: FfiConverterRustBuffer {
+    typealias SwiftType = [PrivateArchiveFileEntry]
+
+    public static func write(_ value: [PrivateArchiveFileEntry], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePrivateArchiveFileEntry.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PrivateArchiveFileEntry] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PrivateArchiveFileEntry]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePrivateArchiveFileEntry.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePrivateFileArchiveEntry: FfiConverterRustBuffer {
+    typealias SwiftType = [PrivateFileArchiveEntry]
+
+    public static func write(_ value: [PrivateFileArchiveEntry], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePrivateFileArchiveEntry.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PrivateFileArchiveEntry] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PrivateFileArchiveEntry]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePrivateFileArchiveEntry.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePublicArchiveFileEntry: FfiConverterRustBuffer {
+    typealias SwiftType = [PublicArchiveFileEntry]
+
+    public static func write(_ value: [PublicArchiveFileEntry], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePublicArchiveFileEntry.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [PublicArchiveFileEntry] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [PublicArchiveFileEntry]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePublicArchiveFileEntry.read(from: &buf))
         }
         return seq
     }
@@ -1548,6 +10123,24 @@ fileprivate func uniffiFutureContinuationCallback(handle: UInt64, pollResult: In
     }
 }
 /**
+ * The maximum size of an unencrypted/raw chunk (4MB)
+ */
+public func chunkMaxRawSize() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_func_chunk_max_raw_size($0
+    )
+})
+}
+/**
+ * The maximum size of an encrypted chunk (4MB + 32 bytes)
+ */
+public func chunkMaxSize() -> UInt64 {
+    return try!  FfiConverterUInt64.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_func_chunk_max_size($0
+    )
+})
+}
+/**
  * Decrypts data that was previously encrypted with the encrypt function
  *
  * Takes the datamap chunk and content chunks returned from encrypt
@@ -1573,6 +10166,47 @@ public func encrypt(data: Data)throws  -> EncryptedData {
     )
 })
 }
+/**
+ * Verify a pointer's signature
+ */
+public func pointerVerify(pointer: NetworkPointer)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_ant_ffi_fn_func_pointer_verify(
+        FfiConverterTypeNetworkPointer.lower(pointer),$0
+    )
+}
+}
+/**
+ * Derive a register key from a secret key and a name.
+ * This is useful for creating multiple registers from a single key.
+ */
+public func registerKeyFromName(owner: SecretKey, name: String) -> SecretKey {
+    return try!  FfiConverterTypeSecretKey.lift(try! rustCall() {
+    uniffi_ant_ffi_fn_func_register_key_from_name(
+        FfiConverterTypeSecretKey.lower(owner),
+        FfiConverterString.lower(name),$0
+    )
+})
+}
+/**
+ * Create a register value from bytes.
+ * The input must be at most 32 bytes. If shorter, it will be padded with zeros.
+ */
+public func registerValueFromBytes(bytes: Data)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeRegisterError.lift) {
+    uniffi_ant_ffi_fn_func_register_value_from_bytes(
+        FfiConverterData.lower(bytes),$0
+    )
+})
+}
+/**
+ * Verify a scratchpad's signature
+ */
+public func scratchpadVerify(scratchpad: Scratchpad)throws  {try rustCallWithError(FfiConverterTypeClientError.lift) {
+    uniffi_ant_ffi_fn_func_scratchpad_verify(
+        FfiConverterTypeScratchpad.lower(scratchpad),$0
+    )
+}
+}
 
 private enum InitializationResult {
     case ok
@@ -1589,16 +10223,424 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_ant_ffi_checksum_func_chunk_max_raw_size() != 55828) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_func_chunk_max_size() != 1683) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ant_ffi_checksum_func_decrypt() != 44871) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ant_ffi_checksum_func_encrypt() != 35938) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ant_ffi_checksum_func_pointer_verify() != 36227) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_func_register_key_from_name() != 63427) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_func_register_value_from_bytes() != 61775) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_func_scratchpad_verify() != 55987) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_archiveaddress_to_hex() != 47485) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_chunk_address() != 11019) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_chunk_is_too_big() != 42314) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_chunk_network_address() != 23310) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_chunk_size() != 10412) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_chunk_value() != 46453) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_chunkaddress_to_bytes() != 51145) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_chunkaddress_to_hex() != 43103) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_archive_cost() != 48307) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_archive_get() != 10800) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_archive_get_public() != 14935) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_archive_put() != 28558) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_archive_put_public() != 28877) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_chunk_cost() != 44256) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_chunk_get() != 37296) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_chunk_put() != 24329) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_data_cost() != 29884) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_data_get() != 64657) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ant_ffi_checksum_method_client_data_get_public() != 34643) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ant_ffi_checksum_method_client_data_put() != 59606) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ant_ffi_checksum_method_client_data_put_public() != 9296) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_data_stream() != 3148) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_data_stream_public() != 32688) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_dir_content_upload() != 40577) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_dir_download() != 33570) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_dir_download_public() != 26811) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_dir_upload() != 29245) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_dir_upload_public() != 15598) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_file_cost() != 232) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_file_download() != 497) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_file_download_public() != 18991) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_file_upload() != 34469) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_file_upload_public() != 62167) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_graph_entry_check_existence() != 32714) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_graph_entry_cost() != 57831) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_graph_entry_get() != 58100) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_graph_entry_put() != 4711) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_pointer_check_existence() != 16275) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_pointer_cost() != 64514) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_pointer_create() != 40440) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_pointer_get() != 10693) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_pointer_put() != 62126) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_pointer_update() != 57111) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_pointer_update_from() != 56008) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_register_cost() != 23699) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_register_create() != 27428) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_register_get() != 33098) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_register_history_collect() != 43495) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_register_update() != 15969) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_scratchpad_check_existence() != 36616) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_scratchpad_cost() != 16529) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_scratchpad_create() != 3760) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_scratchpad_get() != 57031) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_scratchpad_get_from_public_key() != 58449) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_scratchpad_put() != 7269) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_scratchpad_put_update() != 16653) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_scratchpad_update() != 44370) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_scratchpad_update_from() != 37765) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_vault_cost() != 28940) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_vault_get() != 3095) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_vault_get_user_data() != 2807) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_vault_put() != 22924) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_client_vault_put_user_data() != 64558) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_dataaddress_to_bytes() != 50244) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_dataaddress_to_hex() != 1736) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_datamapchunk_address() != 15259) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_datamapchunk_to_hex() != 1048) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_datastream_collect_all() != 46450) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_datastream_data_size() != 58671) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_datastream_get_range() != 35713) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_datastream_next_chunk() != 18631) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_derivationindex_to_bytes() != 63203) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_derivedpubkey_to_bytes() != 9383) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_derivedpubkey_to_hex() != 30130) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_derivedpubkey_verify() != 12661) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_derivedsecretkey_public_key() != 21568) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_derivedsecretkey_sign() != 36520) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_graphentry_address() != 49714) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_graphentry_content() != 33010) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_graphentry_descendants() != 7027) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_graphentry_parents() != 64590) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_graphentryaddress_to_hex() != 29746) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_mainpubkey_derive_key() != 19786) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_mainpubkey_to_bytes() != 23344) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_mainpubkey_to_hex() != 51923) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_mainpubkey_verify() != 13227) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_mainsecretkey_derive_key() != 48766) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_mainsecretkey_public_key() != 56357) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_mainsecretkey_random_derived_key() != 65450) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_mainsecretkey_sign() != 24532) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_mainsecretkey_to_bytes() != 2774) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_metadata_created() != 65260) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_metadata_modified() != 54476) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_metadata_size() != 37742) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_networkpointer_address() != 6861) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_networkpointer_counter() != 10479) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_networkpointer_target() != 17408) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_pointeraddress_owner() != 33615) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_pointeraddress_to_hex() != 27340) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_pointertarget_to_hex() != 56917) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_privatearchive_add_file() != 16479) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_privatearchive_data_maps() != 51031) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_privatearchive_file_count() != 56055) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_privatearchive_files() != 55817) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_privatearchive_rename_file() != 21010) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_privatearchivedatamap_to_hex() != 25005) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_publicarchive_add_file() != 56458) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_publicarchive_addresses() != 56699) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_publicarchive_file_count() != 44304) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_publicarchive_files() != 9207) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_publicarchive_rename_file() != 42490) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_publickey_to_hex() != 31973) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_registeraddress_owner() != 28652) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_registeraddress_to_hex() != 8543) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpad_address() != 31958) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpad_counter() != 19201) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpad_data_encoding() != 65310) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpad_decrypt_data() != 4690) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpad_encrypted_data() != 32371) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpad_encrypted_data_hash() != 24110) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpad_owner() != 26755) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpad_scratchpad_hash() != 49083) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpadaddress_owner() != 605) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_scratchpadaddress_to_hex() != 37807) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_secretkey_public_key() != 6130) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_secretkey_to_hex() != 23235) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_signature_parity() != 53188) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_signature_to_bytes() != 16094) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_signature_to_hex() != 21464) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_userdata_file_archives() != 42486) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_userdata_private_file_archives() != 19922) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_method_vaultsecretkey_to_hex() != 65331) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ant_ffi_checksum_method_wallet_address() != 40064) {
@@ -1607,13 +10649,151 @@ private var initializationResult: InitializationResult = {
     if (uniffi_ant_ffi_checksum_method_wallet_balance_of_tokens() != 6774) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ant_ffi_checksum_constructor_archiveaddress_from_hex() != 62371) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_chunk_new() != 30251) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_chunkaddress_from_content() != 20189) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_chunkaddress_from_hex() != 22773) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_chunkaddress_new() != 44446) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ant_ffi_checksum_constructor_client_init() != 46398) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ant_ffi_checksum_constructor_client_init_local() != 15883) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_ant_ffi_checksum_constructor_client_init_with_peers() != 49449) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_dataaddress_from_hex() != 20045) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_dataaddress_new() != 55913) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_datamapchunk_from_hex() != 36364) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_derivationindex_from_bytes() != 35974) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_derivationindex_random() != 32610) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_derivedpubkey_from_hex() != 40705) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_derivedpubkey_new() != 10209) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_derivedsecretkey_new() != 5001) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_graphentry_new() != 45350) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_graphentryaddress_from_hex() != 18454) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_graphentryaddress_new() != 31586) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_mainpubkey_from_hex() != 7924) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_mainpubkey_new() != 33769) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_mainsecretkey_new() != 4860) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_mainsecretkey_random() != 57332) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_metadata_new() != 57748) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_metadata_with_timestamps() != 63972) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_network_custom() != 39094) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_ant_ffi_checksum_constructor_network_new() != 56950) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_networkpointer_new() != 20205) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_pointeraddress_from_hex() != 35708) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_pointeraddress_new() != 6353) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_pointertarget_chunk() != 42074) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_pointertarget_graph_entry() != 62752) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_pointertarget_pointer() != 39886) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_pointertarget_scratchpad() != 62121) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_privatearchive_new() != 61392) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_privatearchivedatamap_from_hex() != 14182) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_publicarchive_new() != 48110) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_publickey_from_hex() != 28880) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_registeraddress_from_hex() != 22079) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_registeraddress_new() != 41331) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_scratchpad_new() != 52365) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_scratchpadaddress_from_hex() != 30098) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_scratchpadaddress_new() != 29481) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_secretkey_from_hex() != 19454) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_secretkey_random() != 24788) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_signature_from_bytes() != 9234) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_userdata_new() != 27620) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_vaultsecretkey_from_hex() != 64697) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_ant_ffi_checksum_constructor_vaultsecretkey_random() != 12287) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_ant_ffi_checksum_constructor_wallet_new_from_private_key() != 13669) {
