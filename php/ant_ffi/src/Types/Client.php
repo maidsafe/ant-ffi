@@ -218,6 +218,42 @@ final class Client extends NativeHandle
     }
 
     /**
+     * Get the estimated cost to upload data (blocking).
+     *
+     * Use this to show a quote before the user confirms an upload.
+     *
+     * @param string $data The data to estimate cost for
+     * @return string The estimated cost in tokens
+     */
+    public function dataCostSync(string $data): string
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $dataBuffer = RustBuffer::fromStringWithPrefix($data);
+
+        $ffi->uniffi_ant_ffi_fn_func_client_data_cost_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $dataBuffer,
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        // The result is a String, serialized as 4-byte BE length + UTF-8 data
+        $rawData = RustBuffer::toBytes($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        // Skip the 4-byte length prefix
+        if (strlen($rawData) >= 4) {
+            return substr($rawData, 4);
+        }
+        return $rawData;
+    }
+
+    /**
      * Serialize a list of strings for UniFFI.
      * Format: 4-byte BE count + each string with 4-byte BE length prefix
      */

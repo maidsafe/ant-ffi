@@ -126,3 +126,4 @@ void ffi_ant_ffi_rust_future_free_u64(uint64_t handle);
 void *uniffi_ant_ffi_fn_func_client_init_local_blocking(RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_func_client_data_put_public_blocking(RustBuffer *out_result, void *client, RustBuffer data, void *wallet, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_func_client_data_get_public_blocking(RustBuffer *out_result, void *client, RustBuffer address_hex, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_func_client_data_cost_blocking(RustBuffer *out_result, void *client, RustBuffer data, RustCallStatus *out_status);
