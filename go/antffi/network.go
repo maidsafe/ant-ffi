@@ -16,7 +16,7 @@ typedef struct {
 
 // Network functions
 extern void* uniffi_ant_ffi_fn_constructor_network_new(int8_t local, RustCallStatus* status);
-extern void* uniffi_ant_ffi_fn_constructor_network_custom(RustBuffer rpc_url, RustBuffer payment_token_address, RustBuffer data_payments_address, RustCallStatus* status);
+extern void* uniffi_ant_ffi_fn_constructor_network_custom(RustBuffer rpc_url, RustBuffer payment_token_address, RustBuffer data_payments_address, RustBuffer royalties_pk_hex, RustCallStatus* status);
 extern void uniffi_ant_ffi_fn_free_network(void* ptr, RustCallStatus* status);
 extern void* uniffi_ant_ffi_fn_clone_network(void* ptr, RustCallStatus* status);
 */
@@ -55,13 +55,15 @@ func NewNetwork(local bool) (*Network, error) {
 }
 
 // NewNetworkCustom creates a custom network configuration with specific RPC URL and contract addresses.
-func NewNetworkCustom(rpcURL, paymentTokenAddress, dataPaymentsAddress string) (*Network, error) {
+// royaltiesPkHex is optional - pass nil if not needed.
+func NewNetworkCustom(rpcURL, paymentTokenAddress, dataPaymentsAddress string, royaltiesPkHex *string) (*Network, error) {
 	rpcURLBuffer := stringToRustBuffer(rpcURL)
 	paymentTokenBuffer := stringToRustBuffer(paymentTokenAddress)
 	dataPaymentsBuffer := stringToRustBuffer(dataPaymentsAddress)
+	royaltiesBuffer := optionStringToRustBuffer(royaltiesPkHex)
 
 	var status C.RustCallStatus
-	handle := C.uniffi_ant_ffi_fn_constructor_network_custom(rpcURLBuffer, paymentTokenBuffer, dataPaymentsBuffer, &status)
+	handle := C.uniffi_ant_ffi_fn_constructor_network_custom(rpcURLBuffer, paymentTokenBuffer, dataPaymentsBuffer, royaltiesBuffer, &status)
 
 	if err := checkStatus(&status, "Network.Custom"); err != nil {
 		return nil, err

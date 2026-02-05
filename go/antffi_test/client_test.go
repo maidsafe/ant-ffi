@@ -37,7 +37,7 @@ func TestNetworkCustom(t *testing.T) {
 	paymentToken := os.Getenv("ANT_PAYMENT_TOKEN_ADDRESS")
 	dataPayments := os.Getenv("ANT_DATA_PAYMENTS_ADDRESS")
 
-	network, err := antffi.NewNetworkCustom(rpcURL, paymentToken, dataPayments)
+	network, err := antffi.NewNetworkCustom(rpcURL, paymentToken, dataPayments, nil)
 	if err != nil {
 		t.Fatalf("NewNetworkCustom failed: %v", err)
 	}

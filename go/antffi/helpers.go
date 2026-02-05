@@ -151,6 +151,31 @@ func freeRustBuffer(buf C.RustBuffer) {
 	C.ffi_ant_ffi_rustbuffer_free(buf, &status)
 }
 
+// optionStringToRustBuffer converts an optional Go string to a RustBuffer with UniFFI Option serialization.
+// None: 1 byte (0), Some: 1 byte (1) + 4-byte big-endian length + UTF-8 bytes.
+func optionStringToRustBuffer(s *string) C.RustBuffer {
+	var buf []byte
+	if s == nil {
+		// None variant: just a 0 byte
+		buf = []byte{0}
+	} else {
+		// Some variant: 1 byte + 4-byte BE length + UTF-8 data
+		data := []byte(*s)
+		buf = make([]byte, 1+4+len(data))
+		buf[0] = 1 // Some
+		binary.BigEndian.PutUint32(buf[1:5], uint32(len(data)))
+		copy(buf[5:], data)
+	}
+
+	fb := C.ForeignBytes{
+		len:  C.int32_t(len(buf)),
+		data: (*C.uint8_t)(unsafe.Pointer(&buf[0])),
+	}
+
+	var status C.RustCallStatus
+	return C.ffi_ant_ffi_rustbuffer_from_bytes(fb, &status)
+}
+
 // lowerPaymentOption serializes a Wallet handle for PaymentOption::Wallet variant.
 // UniFFI enum serialization: 4-byte variant tag + payload
 func lowerPaymentOption(walletPtr unsafe.Pointer) C.RustBuffer {
