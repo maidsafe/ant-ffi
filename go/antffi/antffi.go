@@ -345,11 +345,16 @@ extern uint64_t uniffi_ant_ffi_fn_method_client_file_cost(void* ptr, RustBuffer 
 
 extern uint64_t uniffi_ant_ffi_fn_method_client_chunk_put(void* ptr, RustBuffer data, RustBuffer payment);
 extern uint64_t uniffi_ant_ffi_fn_method_client_chunk_get(void* ptr, void* address);
+extern uint64_t uniffi_ant_ffi_fn_method_client_chunk_cost(void* ptr, void* address);
 
 // ========== Client - Pointer Operations (Async) ==========
 
 extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_get(void* ptr, void* address);
 extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_put(void* ptr, void* pointer, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_create(void* ptr, void* owner, void* target, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_update(void* ptr, void* owner, void* target, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_cost(void* ptr, void* key);
+extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_check_existence(void* ptr, void* address);
 
 // ========== Client - GraphEntry Operations (Async) ==========
 
@@ -360,22 +365,42 @@ extern uint64_t uniffi_ant_ffi_fn_method_client_graph_entry_put(void* ptr, void*
 
 extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_get(void* ptr, void* address);
 extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_put(void* ptr, void* scratchpad, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_get_from_public_key(void* ptr, void* publicKey);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_create(void* ptr, void* owner, uint64_t contentType, RustBuffer initialData, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_update(void* ptr, void* owner, uint64_t contentType, RustBuffer data, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_cost(void* ptr, void* publicKey);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_check_existence(void* ptr, void* address);
 
 // ========== Client - Register Operations (Async) ==========
 
 extern uint64_t uniffi_ant_ffi_fn_method_client_register_get(void* ptr, void* address);
 extern uint64_t uniffi_ant_ffi_fn_method_client_register_create(void* ptr, void* owner, RustBuffer value, RustBuffer payment);
 extern uint64_t uniffi_ant_ffi_fn_method_client_register_update(void* ptr, void* owner, RustBuffer value, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_register_cost(void* ptr, void* owner);
 
 // ========== Client - Vault Operations (Async) ==========
 
 extern uint64_t uniffi_ant_ffi_fn_method_client_vault_get_user_data(void* ptr, void* secretKey);
 extern uint64_t uniffi_ant_ffi_fn_method_client_vault_put_user_data(void* ptr, void* secretKey, RustBuffer payment, void* userData);
+extern uint64_t uniffi_ant_ffi_fn_method_client_vault_cost(void* ptr, void* key, uint64_t maxSize);
 
 // ========== Client - Archive Operations (Async) ==========
 
 extern uint64_t uniffi_ant_ffi_fn_method_client_archive_get_public(void* ptr, void* address);
 extern uint64_t uniffi_ant_ffi_fn_method_client_archive_put_public(void* ptr, void* archive, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_archive_cost(void* ptr, void* archive);
+
+// ========== Client - GraphEntry Operations (Async) - Additional ==========
+
+extern uint64_t uniffi_ant_ffi_fn_method_client_graph_entry_cost(void* ptr, void* key);
+extern uint64_t uniffi_ant_ffi_fn_method_client_graph_entry_check_existence(void* ptr, void* address);
+
+// ========== Client - Directory Operations (Async) ==========
+
+extern uint64_t uniffi_ant_ffi_fn_method_client_dir_upload(void* ptr, RustBuffer path, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_dir_upload_public(void* ptr, RustBuffer path, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_dir_download(void* ptr, void* dataMap, RustBuffer destPath);
+extern uint64_t uniffi_ant_ffi_fn_method_client_dir_download_public(void* ptr, void* address, RustBuffer destPath);
 
 // ========== Async Future Polling ==========
 

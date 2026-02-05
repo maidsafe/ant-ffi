@@ -37,31 +37,52 @@ extern uint64_t uniffi_ant_ffi_fn_method_client_file_cost(void* ptr, RustBuffer 
 // Client - Chunk Operations (Async)
 extern uint64_t uniffi_ant_ffi_fn_method_client_chunk_put(void* ptr, RustBuffer data, RustBuffer payment);
 extern uint64_t uniffi_ant_ffi_fn_method_client_chunk_get(void* ptr, void* address);
+extern uint64_t uniffi_ant_ffi_fn_method_client_chunk_cost(void* ptr, void* address);
 
 // Client - Pointer Operations (Async)
 extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_get(void* ptr, void* address);
 extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_put(void* ptr, void* pointer, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_create(void* ptr, void* owner, void* target, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_update(void* ptr, void* owner, void* target, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_cost(void* ptr, void* key);
+extern uint64_t uniffi_ant_ffi_fn_method_client_pointer_check_existence(void* ptr, void* address);
 
 // Client - GraphEntry Operations (Async)
 extern uint64_t uniffi_ant_ffi_fn_method_client_graph_entry_get(void* ptr, void* address);
 extern uint64_t uniffi_ant_ffi_fn_method_client_graph_entry_put(void* ptr, void* entry, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_graph_entry_cost(void* ptr, void* key);
+extern uint64_t uniffi_ant_ffi_fn_method_client_graph_entry_check_existence(void* ptr, void* address);
 
 // Client - Scratchpad Operations (Async)
 extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_get(void* ptr, void* address);
 extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_put(void* ptr, void* scratchpad, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_get_from_public_key(void* ptr, void* publicKey);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_create(void* ptr, void* owner, uint64_t contentType, RustBuffer initialData, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_update(void* ptr, void* owner, uint64_t contentType, RustBuffer data, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_cost(void* ptr, void* publicKey);
+extern uint64_t uniffi_ant_ffi_fn_method_client_scratchpad_check_existence(void* ptr, void* address);
 
 // Client - Register Operations (Async)
 extern uint64_t uniffi_ant_ffi_fn_method_client_register_get(void* ptr, void* address);
 extern uint64_t uniffi_ant_ffi_fn_method_client_register_create(void* ptr, void* owner, RustBuffer value, RustBuffer payment);
 extern uint64_t uniffi_ant_ffi_fn_method_client_register_update(void* ptr, void* owner, RustBuffer value, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_register_cost(void* ptr, void* owner);
 
 // Client - Vault Operations (Async)
 extern uint64_t uniffi_ant_ffi_fn_method_client_vault_get_user_data(void* ptr, void* secretKey);
 extern uint64_t uniffi_ant_ffi_fn_method_client_vault_put_user_data(void* ptr, void* secretKey, RustBuffer payment, void* userData);
+extern uint64_t uniffi_ant_ffi_fn_method_client_vault_cost(void* ptr, void* key, uint64_t maxSize);
 
 // Client - Archive Operations (Async)
 extern uint64_t uniffi_ant_ffi_fn_method_client_archive_get_public(void* ptr, void* address);
 extern uint64_t uniffi_ant_ffi_fn_method_client_archive_put_public(void* ptr, void* archive, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_archive_cost(void* ptr, void* archive);
+
+// Client - Directory Operations (Async)
+extern uint64_t uniffi_ant_ffi_fn_method_client_dir_upload(void* ptr, RustBuffer path, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_dir_upload_public(void* ptr, RustBuffer path, RustBuffer payment);
+extern uint64_t uniffi_ant_ffi_fn_method_client_dir_download(void* ptr, void* dataMap, RustBuffer destPath);
+extern uint64_t uniffi_ant_ffi_fn_method_client_dir_download_public(void* ptr, void* address, RustBuffer destPath);
 */
 import "C"
 
@@ -834,4 +855,542 @@ func (c *Client) ArchivePutPublic(ctx context.Context, archive *PublicArchive, p
 	}
 
 	return newArchiveAddress(ptr), nil
+}
+
+// ========== Cost Methods ==========
+
+// ChunkCost calculates the cost to store a chunk at a specific address.
+func (c *Client) ChunkCost(ctx context.Context, address *ChunkAddress) (string, error) {
+	if address == nil {
+		return "", ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return "", ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	addressCloned := address.CloneHandle()
+	if addressCloned == nil {
+		return "", ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_chunk_cost(cloned, addressCloned))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return "", err
+	}
+
+	return stringFromRustBuffer(buf), nil
+}
+
+// PointerCost calculates the cost to create a pointer for a given public key.
+func (c *Client) PointerCost(ctx context.Context, key *PublicKey) (string, error) {
+	if key == nil {
+		return "", ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return "", ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	keyCloned := key.CloneHandle()
+	if keyCloned == nil {
+		return "", ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_pointer_cost(cloned, keyCloned))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return "", err
+	}
+
+	return stringFromRustBuffer(buf), nil
+}
+
+// ScratchpadCost calculates the cost to create a scratchpad for a given public key.
+func (c *Client) ScratchpadCost(ctx context.Context, publicKey *PublicKey) (string, error) {
+	if publicKey == nil {
+		return "", ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return "", ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	keyCloned := publicKey.CloneHandle()
+	if keyCloned == nil {
+		return "", ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_scratchpad_cost(cloned, keyCloned))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return "", err
+	}
+
+	return stringFromRustBuffer(buf), nil
+}
+
+// RegisterCost calculates the cost to create a register for a given owner.
+func (c *Client) RegisterCost(ctx context.Context, owner *PublicKey) (string, error) {
+	if owner == nil {
+		return "", ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return "", ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	ownerCloned := owner.CloneHandle()
+	if ownerCloned == nil {
+		return "", ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_register_cost(cloned, ownerCloned))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return "", err
+	}
+
+	return stringFromRustBuffer(buf), nil
+}
+
+// VaultCost calculates the cost to create a vault with a given maximum size.
+func (c *Client) VaultCost(ctx context.Context, key *VaultSecretKey, maxSize uint64) (string, error) {
+	if key == nil {
+		return "", ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return "", ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	keyCloned := key.CloneHandle()
+	if keyCloned == nil {
+		return "", ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_vault_cost(cloned, keyCloned, C.uint64_t(maxSize)))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return "", err
+	}
+
+	return stringFromRustBuffer(buf), nil
+}
+
+// GraphEntryCost calculates the cost to create a graph entry for a given public key.
+func (c *Client) GraphEntryCost(ctx context.Context, key *PublicKey) (string, error) {
+	if key == nil {
+		return "", ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return "", ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	keyCloned := key.CloneHandle()
+	if keyCloned == nil {
+		return "", ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_graph_entry_cost(cloned, keyCloned))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return "", err
+	}
+
+	return stringFromRustBuffer(buf), nil
+}
+
+// ArchiveCost calculates the cost to store an archive on the network.
+func (c *Client) ArchiveCost(ctx context.Context, archive *PublicArchive) (string, error) {
+	if archive == nil {
+		return "", ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return "", ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	archiveCloned := archive.CloneHandle()
+	if archiveCloned == nil {
+		return "", ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_archive_cost(cloned, archiveCloned))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return "", err
+	}
+
+	return stringFromRustBuffer(buf), nil
+}
+
+// ========== Pointer Additional Operations ==========
+
+// PointerCreate creates a new pointer pointing to a target address.
+func (c *Client) PointerCreate(ctx context.Context, owner *DerivedSecretKey, target *PointerTarget, payment *PaymentOption) (*PointerAddress, error) {
+	if owner == nil || target == nil {
+		return nil, ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return nil, ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	ownerCloned := owner.CloneHandle()
+	if ownerCloned == nil {
+		return nil, ErrDisposed
+	}
+	targetCloned := target.CloneHandle()
+	if targetCloned == nil {
+		return nil, ErrDisposed
+	}
+	paymentBuffer := getPaymentBuffer(payment)
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_pointer_create(cloned, ownerCloned, targetCloned, paymentBuffer))
+	ptr, err := pollPointerFuture(ctx, futureHandle)
+	if err != nil {
+		return nil, err
+	}
+
+	return newPointerAddress(ptr), nil
+}
+
+// PointerUpdate updates an existing pointer to point to a new target.
+func (c *Client) PointerUpdate(ctx context.Context, owner *DerivedSecretKey, target *PointerTarget, payment *PaymentOption) error {
+	if owner == nil || target == nil {
+		return ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	ownerCloned := owner.CloneHandle()
+	if ownerCloned == nil {
+		return ErrDisposed
+	}
+	targetCloned := target.CloneHandle()
+	if targetCloned == nil {
+		return ErrDisposed
+	}
+	paymentBuffer := getPaymentBuffer(payment)
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_pointer_update(cloned, ownerCloned, targetCloned, paymentBuffer))
+	_, err := pollRustBufferFuture(ctx, futureHandle)
+	return err
+}
+
+// PointerCheckExistence checks if a pointer exists at the given address.
+func (c *Client) PointerCheckExistence(ctx context.Context, address *PointerAddress) (bool, error) {
+	if address == nil {
+		return false, ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return false, ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	addressCloned := address.CloneHandle()
+	if addressCloned == nil {
+		return false, ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_pointer_check_existence(cloned, addressCloned))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return false, err
+	}
+
+	// Boolean is serialized as a single byte: 0 = false, 1 = true
+	data := fromRustBuffer(buf, true)
+	return len(data) > 0 && data[0] != 0, nil
+}
+
+// ========== Scratchpad Additional Operations ==========
+
+// ScratchpadGetFromPublicKey retrieves a scratchpad by public key.
+func (c *Client) ScratchpadGetFromPublicKey(ctx context.Context, publicKey *PublicKey) (*Scratchpad, error) {
+	if publicKey == nil {
+		return nil, ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return nil, ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	keyCloned := publicKey.CloneHandle()
+	if keyCloned == nil {
+		return nil, ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_scratchpad_get_from_public_key(cloned, keyCloned))
+	ptr, err := pollPointerFuture(ctx, futureHandle)
+	if err != nil {
+		return nil, err
+	}
+
+	return newScratchpad(ptr), nil
+}
+
+// ScratchpadCreate creates a new scratchpad with initial data.
+func (c *Client) ScratchpadCreate(ctx context.Context, owner *DerivedSecretKey, contentType uint64, initialData []byte, payment *PaymentOption) (*ScratchpadAddress, error) {
+	if owner == nil {
+		return nil, ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return nil, ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	ownerCloned := owner.CloneHandle()
+	if ownerCloned == nil {
+		return nil, ErrDisposed
+	}
+	dataBuffer := toRustBuffer(initialData)
+	paymentBuffer := getPaymentBuffer(payment)
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_scratchpad_create(cloned, ownerCloned, C.uint64_t(contentType), dataBuffer, paymentBuffer))
+	ptr, err := pollPointerFuture(ctx, futureHandle)
+	if err != nil {
+		return nil, err
+	}
+
+	return newScratchpadAddress(ptr), nil
+}
+
+// ScratchpadUpdate updates an existing scratchpad with new data.
+func (c *Client) ScratchpadUpdate(ctx context.Context, owner *DerivedSecretKey, contentType uint64, data []byte, payment *PaymentOption) error {
+	if owner == nil {
+		return ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	ownerCloned := owner.CloneHandle()
+	if ownerCloned == nil {
+		return ErrDisposed
+	}
+	dataBuffer := toRustBuffer(data)
+	paymentBuffer := getPaymentBuffer(payment)
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_scratchpad_update(cloned, ownerCloned, C.uint64_t(contentType), dataBuffer, paymentBuffer))
+	_, err := pollRustBufferFuture(ctx, futureHandle)
+	return err
+}
+
+// ScratchpadCheckExistence checks if a scratchpad exists at the given address.
+func (c *Client) ScratchpadCheckExistence(ctx context.Context, address *ScratchpadAddress) (bool, error) {
+	if address == nil {
+		return false, ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return false, ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	addressCloned := address.CloneHandle()
+	if addressCloned == nil {
+		return false, ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_scratchpad_check_existence(cloned, addressCloned))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return false, err
+	}
+
+	// Boolean is serialized as a single byte: 0 = false, 1 = true
+	data := fromRustBuffer(buf, true)
+	return len(data) > 0 && data[0] != 0, nil
+}
+
+// ========== GraphEntry Additional Operations ==========
+
+// GraphEntryCheckExistence checks if a graph entry exists at the given address.
+func (c *Client) GraphEntryCheckExistence(ctx context.Context, address *GraphEntryAddress) (bool, error) {
+	if address == nil {
+		return false, ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return false, ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	addressCloned := address.CloneHandle()
+	if addressCloned == nil {
+		return false, ErrDisposed
+	}
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_graph_entry_check_existence(cloned, addressCloned))
+	buf, err := pollRustBufferFuture(ctx, futureHandle)
+	if err != nil {
+		return false, err
+	}
+
+	// Boolean is serialized as a single byte: 0 = false, 1 = true
+	data := fromRustBuffer(buf, true)
+	return len(data) > 0 && data[0] != 0, nil
+}
+
+// ========== Directory Operations ==========
+
+// DirUpload uploads a directory to the network (private).
+// Returns a DataMapChunk for accessing the directory.
+func (c *Client) DirUpload(ctx context.Context, path string, payment *PaymentOption) (*PrivateArchiveDataMap, error) {
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return nil, ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	pathBuffer := stringToRustBuffer(path)
+	paymentBuffer := getPaymentBuffer(payment)
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_dir_upload(cloned, pathBuffer, paymentBuffer))
+	ptr, err := pollPointerFuture(ctx, futureHandle)
+	if err != nil {
+		return nil, err
+	}
+
+	return newPrivateArchiveDataMap(ptr), nil
+}
+
+// DirUploadPublic uploads a directory to the network (public).
+// Returns the archive address.
+func (c *Client) DirUploadPublic(ctx context.Context, path string, payment *PaymentOption) (*ArchiveAddress, error) {
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return nil, ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	pathBuffer := stringToRustBuffer(path)
+	paymentBuffer := getPaymentBuffer(payment)
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_dir_upload_public(cloned, pathBuffer, paymentBuffer))
+	ptr, err := pollPointerFuture(ctx, futureHandle)
+	if err != nil {
+		return nil, err
+	}
+
+	return newArchiveAddress(ptr), nil
+}
+
+// DirDownload downloads a private directory from the network to a local path.
+func (c *Client) DirDownload(ctx context.Context, dataMap *PrivateArchiveDataMap, destPath string) error {
+	if dataMap == nil {
+		return ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	dataMapCloned := dataMap.CloneHandle()
+	if dataMapCloned == nil {
+		return ErrDisposed
+	}
+	destPathBuffer := stringToRustBuffer(destPath)
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_dir_download(cloned, dataMapCloned, destPathBuffer))
+	_, err := pollVoidFuture(ctx, futureHandle)
+	return err
+}
+
+// DirDownloadPublic downloads a public directory from the network to a local path.
+func (c *Client) DirDownloadPublic(ctx context.Context, address *ArchiveAddress, destPath string) error {
+	if address == nil {
+		return ErrNilPointer
+	}
+
+	c.mu.Lock()
+	if c.freed {
+		c.mu.Unlock()
+		return ErrDisposed
+	}
+	cloned := c.cloneHandle()
+	c.mu.Unlock()
+
+	addressCloned := address.CloneHandle()
+	if addressCloned == nil {
+		return ErrDisposed
+	}
+	destPathBuffer := stringToRustBuffer(destPath)
+
+	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_dir_download_public(cloned, addressCloned, destPathBuffer))
+	_, err := pollVoidFuture(ctx, futureHandle)
+	return err
 }

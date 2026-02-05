@@ -333,3 +333,190 @@ func TestContextCancellation(t *testing.T) {
 		t.Logf("Got expected error: %v", err)
 	}
 }
+
+// ========== Cost Method Tests ==========
+
+func TestClientPointerCost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client, err := antffi.NewClientLocal(ctx)
+	if err != nil {
+		t.Fatalf("NewClientLocal failed: %v", err)
+	}
+	defer client.Free()
+
+	// Generate a key pair for cost estimation
+	secretKey, err := antffi.NewSecretKey()
+	if err != nil {
+		t.Fatalf("NewSecretKey failed: %v", err)
+	}
+	defer secretKey.Free()
+
+	publicKey, err := secretKey.PublicKey()
+	if err != nil {
+		t.Fatalf("PublicKey failed: %v", err)
+	}
+	defer publicKey.Free()
+
+	cost, err := client.PointerCost(ctx, publicKey)
+	if err != nil {
+		t.Fatalf("PointerCost failed: %v", err)
+	}
+
+	t.Logf("Pointer cost: %s", cost)
+}
+
+func TestClientScratchpadCost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client, err := antffi.NewClientLocal(ctx)
+	if err != nil {
+		t.Fatalf("NewClientLocal failed: %v", err)
+	}
+	defer client.Free()
+
+	// Generate a key pair for cost estimation
+	secretKey, err := antffi.NewSecretKey()
+	if err != nil {
+		t.Fatalf("NewSecretKey failed: %v", err)
+	}
+	defer secretKey.Free()
+
+	publicKey, err := secretKey.PublicKey()
+	if err != nil {
+		t.Fatalf("PublicKey failed: %v", err)
+	}
+	defer publicKey.Free()
+
+	cost, err := client.ScratchpadCost(ctx, publicKey)
+	if err != nil {
+		t.Fatalf("ScratchpadCost failed: %v", err)
+	}
+
+	t.Logf("Scratchpad cost: %s", cost)
+}
+
+func TestClientRegisterCost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client, err := antffi.NewClientLocal(ctx)
+	if err != nil {
+		t.Fatalf("NewClientLocal failed: %v", err)
+	}
+	defer client.Free()
+
+	// Generate a key pair for cost estimation
+	secretKey, err := antffi.NewSecretKey()
+	if err != nil {
+		t.Fatalf("NewSecretKey failed: %v", err)
+	}
+	defer secretKey.Free()
+
+	publicKey, err := secretKey.PublicKey()
+	if err != nil {
+		t.Fatalf("PublicKey failed: %v", err)
+	}
+	defer publicKey.Free()
+
+	cost, err := client.RegisterCost(ctx, publicKey)
+	if err != nil {
+		t.Fatalf("RegisterCost failed: %v", err)
+	}
+
+	t.Logf("Register cost: %s", cost)
+}
+
+func TestClientGraphEntryCost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client, err := antffi.NewClientLocal(ctx)
+	if err != nil {
+		t.Fatalf("NewClientLocal failed: %v", err)
+	}
+	defer client.Free()
+
+	// Generate a key pair for cost estimation
+	secretKey, err := antffi.NewSecretKey()
+	if err != nil {
+		t.Fatalf("NewSecretKey failed: %v", err)
+	}
+	defer secretKey.Free()
+
+	publicKey, err := secretKey.PublicKey()
+	if err != nil {
+		t.Fatalf("PublicKey failed: %v", err)
+	}
+	defer publicKey.Free()
+
+	cost, err := client.GraphEntryCost(ctx, publicKey)
+	if err != nil {
+		t.Fatalf("GraphEntryCost failed: %v", err)
+	}
+
+	t.Logf("GraphEntry cost: %s", cost)
+}
+
+// ========== E2E Integration Test ==========
+
+func TestE2EUploadDownloadRoundtrip(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	// 1. Create client
+	t.Log("Creating client...")
+	client, err := antffi.NewClientLocal(ctx)
+	if err != nil {
+		t.Fatalf("NewClientLocal failed: %v", err)
+	}
+	defer client.Free()
+
+	// 2. Create network and wallet
+	t.Log("Creating network and wallet...")
+	network, err := antffi.NewNetwork(true) // local network
+	if err != nil {
+		t.Fatalf("NewNetwork failed: %v", err)
+	}
+	defer network.Free()
+
+	wallet, err := antffi.NewWalletFromPrivateKey(network, TestPrivateKey)
+	if err != nil {
+		t.Fatalf("NewWalletFromPrivateKey failed: %v", err)
+	}
+	defer wallet.Free()
+
+	// 3. Get cost estimate
+	testData := []byte("Hello from Go E2E test! Testing upload and download roundtrip.")
+	t.Log("Getting cost estimate...")
+	cost, err := client.DataCost(ctx, testData)
+	if err != nil {
+		t.Fatalf("DataCost failed: %v", err)
+	}
+	t.Logf("Estimated cost: %s", cost)
+
+	// 4. Upload data
+	t.Log("Uploading data...")
+	payment := &antffi.PaymentOption{Wallet: wallet}
+	result, err := client.DataPutPublic(ctx, testData, payment)
+	if err != nil {
+		t.Fatalf("DataPutPublic failed: %v", err)
+	}
+	t.Logf("Upload successful! Address: %s, Cost: %s", result.Address, result.Cost)
+
+	// 5. Download data
+	t.Log("Downloading data...")
+	downloaded, err := client.DataGetPublic(ctx, result.Address)
+	if err != nil {
+		t.Fatalf("DataGetPublic failed: %v", err)
+	}
+
+	// 6. Verify roundtrip
+	if string(downloaded) != string(testData) {
+		t.Fatalf("Data mismatch!\nExpected: %s\nGot: %s", string(testData), string(downloaded))
+	}
+
+	t.Log("E2E test passed! Data uploaded, downloaded, and verified successfully.")
+}
