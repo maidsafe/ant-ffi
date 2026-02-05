@@ -268,14 +268,20 @@ impl Network {
     /// * `rpc_url` - RPC URL for the EVM network (e.g., "http://10.0.2.2:61611")
     /// * `payment_token_address` - Payment token contract address (hex string)
     /// * `data_payments_address` - Data payments contract address (hex string)
+    /// * `royalties_pk_hex` - Optional royalties public key (hex string)
     #[uniffi::constructor]
     pub fn custom(
         rpc_url: String,
         payment_token_address: String,
         data_payments_address: String,
+        royalties_pk_hex: Option<String>,
     ) -> Arc<Self> {
-        let network =
-            autonomi::Network::new_custom(&rpc_url, &payment_token_address, &data_payments_address);
+        let network = autonomi::Network::new_custom(
+            &rpc_url,
+            &payment_token_address,
+            &data_payments_address,
+            royalties_pk_hex.as_deref(),
+        );
 
         Arc::new(Self { inner: network })
     }
@@ -1381,11 +1387,21 @@ impl Client {
     // ===== File Operations =====
 
     /// Get the cost to upload a file to the network
-    pub async fn file_cost(&self, path: String) -> Result<String, ClientError> {
+    ///
+    /// # Arguments
+    /// * `path` - Path to the file
+    /// * `follow_symlinks` - Whether to follow symbolic links
+    /// * `include_hidden` - Whether to include hidden files
+    pub async fn file_cost(
+        &self,
+        path: String,
+        follow_symlinks: bool,
+        include_hidden: bool,
+    ) -> Result<String, ClientError> {
         let path = std::path::PathBuf::from(path);
         let cost = self
             .inner
-            .file_cost(&path)
+            .file_cost(&path, follow_symlinks, include_hidden)
             .await
             .map_err(|e| ClientError::NetworkError {
                 reason: e.to_string(),
@@ -1410,7 +1426,7 @@ impl Client {
 
         let (cost, data_map) = self
             .inner
-            .file_content_upload(path, autonomi_payment)
+            .file_content_upload(path, autonomi_payment.into())
             .await
             .map_err(|e| ClientError::NetworkError {
                 reason: e.to_string(),
@@ -1438,7 +1454,7 @@ impl Client {
 
         let (cost, addr) = self
             .inner
-            .file_content_upload_public(path, autonomi_payment)
+            .file_content_upload_public(path, autonomi_payment.into())
             .await
             .map_err(|e| ClientError::NetworkError {
                 reason: e.to_string(),
@@ -1491,18 +1507,13 @@ impl Client {
     pub async fn dir_upload(
         &self,
         path: String,
-        payment: PaymentOption,
+        wallet: Arc<Wallet>,
     ) -> Result<DirUploadResult, ClientError> {
         let path = std::path::PathBuf::from(path);
-        let autonomi_payment = match payment {
-            PaymentOption::WalletPayment { wallet_ref } => {
-                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
-            }
-        };
 
         let (cost, data_map) = self
             .inner
-            .dir_upload(path, autonomi_payment)
+            .dir_upload(path, &wallet.inner)
             .await
             .map_err(|e| ClientError::NetworkError {
                 reason: e.to_string(),
@@ -1530,7 +1541,7 @@ impl Client {
 
         let (cost, archive) = self
             .inner
-            .dir_content_upload(path, autonomi_payment)
+            .dir_content_upload(path, autonomi_payment.into())
             .await
             .map_err(|e| ClientError::NetworkError {
                 reason: e.to_string(),
@@ -1546,18 +1557,13 @@ impl Client {
     pub async fn dir_upload_public(
         &self,
         path: String,
-        payment: PaymentOption,
+        wallet: Arc<Wallet>,
     ) -> Result<DirUploadPublicResult, ClientError> {
         let path = std::path::PathBuf::from(path);
-        let autonomi_payment = match payment {
-            PaymentOption::WalletPayment { wallet_ref } => {
-                AutonomiPaymentOption::Wallet(wallet_ref.inner.clone())
-            }
-        };
 
         let (cost, addr) = self
             .inner
-            .dir_upload_public(path, autonomi_payment)
+            .dir_upload_public(path, &wallet.inner)
             .await
             .map_err(|e| ClientError::NetworkError {
                 reason: e.to_string(),
