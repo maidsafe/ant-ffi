@@ -17,6 +17,10 @@ typedef struct RustCallStatus {
     RustBuffer error_buf;
 } RustCallStatus;
 
+// Callback type for async future polling
+// poll_result: 0 = WAKE (poll again), 1 = READY (can complete)
+typedef void (*UniFfiRustFutureContinuationCallback)(void* callback_data, int8_t poll_result);
+
 // Buffer Management
 RustBuffer ffi_ant_ffi_rustbuffer_from_bytes(ForeignBytes bytes, RustCallStatus *out_status);
 void ffi_ant_ffi_rustbuffer_free(RustBuffer buf, RustCallStatus *out_status);
@@ -87,9 +91,6 @@ uint64_t uniffi_ant_ffi_fn_constructor_client_init(void);
 uint64_t uniffi_ant_ffi_fn_constructor_client_init_local(void);
 uint64_t uniffi_ant_ffi_fn_constructor_client_init_with_peers(RustBuffer peers, void *network, RustBuffer data_dir);
 
-// Client - Synchronous constructors (blocking, avoids UniFFI async issues)
-void *uniffi_ant_ffi_fn_constructor_client_init_local_sync(RustCallStatus *out_status);
-
 void uniffi_ant_ffi_fn_free_client(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_client(void *ptr, RustCallStatus *out_status);
 
@@ -97,30 +98,31 @@ void *uniffi_ant_ffi_fn_clone_client(void *ptr, RustCallStatus *out_status);
 uint64_t uniffi_ant_ffi_fn_method_client_data_put_public(void *ptr, RustBuffer data, RustBuffer payment);
 uint64_t uniffi_ant_ffi_fn_method_client_data_get_public(void *ptr, RustBuffer address_hex);
 
-// Client - Data Operations (Synchronous - blocking, avoids UniFFI async issues)
-void uniffi_ant_ffi_fn_method_client_data_put_public_sync(RustBuffer *out_result, void *ptr, RustBuffer data, RustBuffer payment, RustCallStatus *out_status);
-void uniffi_ant_ffi_fn_method_client_data_get_public_sync(RustBuffer *out_result, void *ptr, RustBuffer address_hex, RustCallStatus *out_status);
-
 // Async Future Handling - Pointer results
-void ffi_ant_ffi_rust_future_poll_pointer(uint64_t handle, void *callback, uint64_t callback_data);
+void ffi_ant_ffi_rust_future_poll_pointer(uint64_t handle, UniFfiRustFutureContinuationCallback callback, uint64_t callback_data);
 void ffi_ant_ffi_rust_future_cancel_pointer(uint64_t handle);
 void *ffi_ant_ffi_rust_future_complete_pointer(uint64_t handle, RustCallStatus *out_status);
 void ffi_ant_ffi_rust_future_free_pointer(uint64_t handle);
 
 // Async Future Handling - RustBuffer results
-void ffi_ant_ffi_rust_future_poll_rust_buffer(uint64_t handle, void *callback, uint64_t callback_data);
+void ffi_ant_ffi_rust_future_poll_rust_buffer(uint64_t handle, UniFfiRustFutureContinuationCallback callback, uint64_t callback_data);
 void ffi_ant_ffi_rust_future_cancel_rust_buffer(uint64_t handle);
 void ffi_ant_ffi_rust_future_complete_rust_buffer(RustBuffer *out_result, uint64_t handle, RustCallStatus *out_status);
 void ffi_ant_ffi_rust_future_free_rust_buffer(uint64_t handle);
 
 // Async Future Handling - void results
-void ffi_ant_ffi_rust_future_poll_void(uint64_t handle, void *callback, uint64_t callback_data);
+void ffi_ant_ffi_rust_future_poll_void(uint64_t handle, UniFfiRustFutureContinuationCallback callback, uint64_t callback_data);
 void ffi_ant_ffi_rust_future_cancel_void(uint64_t handle);
 void ffi_ant_ffi_rust_future_complete_void(uint64_t handle, RustCallStatus *out_status);
 void ffi_ant_ffi_rust_future_free_void(uint64_t handle);
 
 // Async Future Handling - u64 results
-void ffi_ant_ffi_rust_future_poll_u64(uint64_t handle, void *callback, uint64_t callback_data);
+void ffi_ant_ffi_rust_future_poll_u64(uint64_t handle, UniFfiRustFutureContinuationCallback callback, uint64_t callback_data);
 void ffi_ant_ffi_rust_future_cancel_u64(uint64_t handle);
 uint64_t ffi_ant_ffi_rust_future_complete_u64(uint64_t handle, RustCallStatus *out_status);
 void ffi_ant_ffi_rust_future_free_u64(uint64_t handle);
+
+// Blocking (synchronous) wrapper functions for languages without async support
+void *uniffi_ant_ffi_fn_func_client_init_local_blocking(RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_func_client_data_put_public_blocking(RustBuffer *out_result, void *client, RustBuffer data, void *wallet, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_func_client_data_get_public_blocking(RustBuffer *out_result, void *client, RustBuffer address_hex, RustCallStatus *out_status);

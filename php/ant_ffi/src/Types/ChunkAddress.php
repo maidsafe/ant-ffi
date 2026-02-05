@@ -52,7 +52,7 @@ final class ChunkAddress extends NativeHandle
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
-        $dataBuffer = RustBuffer::fromString($data);
+        $dataBuffer = RustBuffer::fromStringWithPrefix($data);
         $handle = $ffi->uniffi_ant_ffi_fn_constructor_chunkaddress_from_content(
             $dataBuffer,
             FFI::addr($status)

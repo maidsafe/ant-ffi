@@ -34,12 +34,11 @@ final class SelfEncryptionTest extends TestCase
 
     public function testEncryptEmptyString(): void
     {
-        $original = '';
+        // Self-encryption requires at least 3 bytes
+        $this->expectException(\AntFfi\AntFfiException::class);
+        $this->expectExceptionMessage('Too small for self-encryption');
 
-        $encrypted = SelfEncryption::encrypt($original);
-        $decrypted = SelfEncryption::decrypt($encrypted);
-
-        $this->assertEquals($original, $decrypted);
+        SelfEncryption::encrypt('');
     }
 
     public function testEncryptLargeData(): void

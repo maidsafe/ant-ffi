@@ -23,7 +23,7 @@ final class SelfEncryption
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
-        $inputBuffer = RustBuffer::fromString($data);
+        $inputBuffer = RustBuffer::fromStringWithPrefix($data);
         $resultBuffer = $ffi->uniffi_ant_ffi_fn_func_encrypt(
             $inputBuffer,
             FFI::addr($status)

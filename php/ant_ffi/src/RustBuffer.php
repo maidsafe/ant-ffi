@@ -13,11 +13,20 @@ use FFI\CData;
 final class RustBuffer
 {
     /**
-     * Create a RustBuffer from a PHP string with UniFFI length prefix.
-     * UniFFI format: 4-byte big-endian length + UTF-8 data
-     * Use this for functions that expect serialized UniFFI strings.
+     * Create a RustBuffer from a PHP string (raw UTF-8, no prefix).
+     * This is the standard format for string parameters in UniFFI.
      */
     public static function fromString(string $str): CData
+    {
+        return self::fromBytes($str);
+    }
+
+    /**
+     * Create a RustBuffer from a PHP string with UniFFI length prefix.
+     * UniFFI format: 4-byte big-endian length + UTF-8 data
+     * Use this for Vec<u8> parameters that require serialization.
+     */
+    public static function fromStringWithPrefix(string $str): CData
     {
         $len = strlen($str);
         $prefixedData = pack('N', $len) . $str;
@@ -25,8 +34,7 @@ final class RustBuffer
     }
 
     /**
-     * Create a RustBuffer from a raw string (no length prefix).
-     * Use this for functions that expect raw string data (e.g., hex parsing).
+     * Alias for fromString (for clarity when passing raw string data).
      */
     public static function fromRawString(string $str): CData
     {

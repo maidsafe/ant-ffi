@@ -88,12 +88,23 @@ final class Client extends NativeHandle
     /**
      * Initialize a client synchronously (blocking).
      * Use for simple scripts that don't need ReactPHP.
+     *
+     * Uses the dedicated blocking wrapper function that handles
+     * Tokio runtime internally.
      */
     public static function initLocalSync(): self
     {
         $ffi = FFILoader::get();
-        $futureHandle = $ffi->uniffi_ant_ffi_fn_constructor_client_init_local();
-        $handle = AsyncFuture::awaitPointer($futureHandle);
+        $status = $ffi->new('RustCallStatus');
+
+        $handle = $ffi->uniffi_ant_ffi_fn_func_client_init_local_blocking(FFI::addr($status));
+
+        RustBuffer::checkStatus($status);
+
+        if ($handle === null) {
+            throw new AntFfiException('Client initialization returned null');
+        }
+
         return new self($handle);
     }
 
@@ -108,7 +119,7 @@ final class Client extends NativeHandle
     {
         $ffi = FFILoader::get();
 
-        $dataBuffer = RustBuffer::fromString($data);
+        $dataBuffer = RustBuffer::fromStringWithPrefix($data);
         $paymentBuffer = self::serializePaymentOption($wallet);
 
         $futureHandle = $ffi->uniffi_ant_ffi_fn_method_client_data_put_public(
@@ -125,22 +136,27 @@ final class Client extends NativeHandle
 
     /**
      * Upload public data synchronously (blocking).
+     *
+     * Uses the dedicated blocking wrapper function that takes wallet directly.
      */
     public function dataPutPublicSync(string $data, Wallet $wallet): DataPutResult
     {
         $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
 
-        $dataBuffer = RustBuffer::fromString($data);
-        $paymentBuffer = self::serializePaymentOption($wallet);
+        $dataBuffer = RustBuffer::fromStringWithPrefix($data);
 
-        $futureHandle = $ffi->uniffi_ant_ffi_fn_method_client_data_put_public(
+        $ffi->uniffi_ant_ffi_fn_func_client_data_put_public_blocking(
+            FFI::addr($resultBuffer),
             $this->cloneForCall(),
             $dataBuffer,
-            $paymentBuffer
+            $wallet->cloneForCall(),
+            FFI::addr($status)
         );
 
-        $resultBuffer = AsyncFuture::awaitRustBuffer($futureHandle);
-        return self::parseDataPutResult($resultBuffer);
+        RustBuffer::checkStatus($status);
+        return self::parseUploadResult($resultBuffer);
     }
 
     /**
@@ -170,22 +186,35 @@ final class Client extends NativeHandle
 
     /**
      * Download public data synchronously (blocking).
+     *
+     * Uses the dedicated blocking wrapper function.
      */
     public function dataGetPublicSync(string $addressHex): string
     {
         $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
 
         $addressBuffer = RustBuffer::fromString($addressHex);
 
-        $futureHandle = $ffi->uniffi_ant_ffi_fn_method_client_data_get_public(
+        $ffi->uniffi_ant_ffi_fn_func_client_data_get_public_blocking(
+            FFI::addr($resultBuffer),
             $this->cloneForCall(),
-            $addressBuffer
+            $addressBuffer,
+            FFI::addr($status)
         );
 
-        $resultBuffer = AsyncFuture::awaitRustBuffer($futureHandle);
-        $data = RustBuffer::toString($resultBuffer);
+        RustBuffer::checkStatus($status);
+
+        // The result is a Vec<u8>, serialized as 4-byte BE length + data
+        $rawData = RustBuffer::toBytes($resultBuffer);
         RustBuffer::free($resultBuffer);
-        return $data;
+
+        // Skip the 4-byte length prefix
+        if (strlen($rawData) >= 4) {
+            return substr($rawData, 4);
+        }
+        return $rawData;
     }
 
     /**
@@ -218,21 +247,21 @@ final class Client extends NativeHandle
 
     /**
      * Serialize a PaymentOption for UniFFI.
-     * PaymentOption::Wallet variant (index 0) + wallet handle
+     * PaymentOption::WalletPayment variant (index 0) + wallet_ref handle
+     * UniFFI uses big-endian for all numeric values.
      */
     private static function serializePaymentOption(Wallet $wallet): CData
     {
         $ffi = FFILoader::get();
 
-        // PaymentOption enum: 4-byte variant index + data
-        // Variant 0 = Wallet
-        $data = pack('N', 0); // Variant index
+        // PaymentOption enum: 4-byte BE variant index + data
+        // Variant 0 = WalletPayment { wallet_ref }
+        $data = pack('N', 0); // Variant index (big-endian)
 
-        // The wallet handle needs to be serialized as a pointer
-        // In UniFFI, object handles are passed as pointers
+        // wallet_ref is Arc<Wallet> - serialized as 64-bit handle (big-endian)
         $walletHandle = $wallet->cloneForCall();
         $handleInt = FFI::cast('uintptr_t', $walletHandle)->cdata;
-        $data .= pack('P', $handleInt); // 8-byte pointer
+        $data .= pack('J', $handleInt); // 64-bit big-endian
 
         return RustBuffer::fromBytes($data);
     }
@@ -256,6 +285,34 @@ final class Client extends NativeHandle
         $cost = '0';
 
         return new DataPutResult($address, $cost);
+    }
+
+    /**
+     * Parse an UploadResult from a RustBuffer.
+     * UploadResult has: price (String), address (String)
+     * UniFFI serializes strings as: 4-byte BE length + UTF-8 data
+     */
+    private static function parseUploadResult(CData $resultBuffer): DataPutResult
+    {
+        $data = RustBuffer::toBytes($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        $offset = 0;
+
+        // Parse price string
+        $priceLen = unpack('N', substr($data, $offset, 4))[1];
+        $offset += 4;
+        $price = substr($data, $offset, $priceLen);
+        $offset += $priceLen;
+
+        // Parse address string (hex)
+        $addressLen = unpack('N', substr($data, $offset, 4))[1];
+        $offset += 4;
+        $addressHex = substr($data, $offset, $addressLen);
+
+        $address = DataAddress::fromHex($addressHex);
+
+        return new DataPutResult($address, $price);
     }
 
     protected function freeHandle(): void

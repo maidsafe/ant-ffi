@@ -24,7 +24,7 @@ final class Chunk extends NativeHandle
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
-        $dataBuffer = RustBuffer::fromString($data);
+        $dataBuffer = RustBuffer::fromStringWithPrefix($data);
         $handle = $ffi->uniffi_ant_ffi_fn_constructor_chunk_new(
             $dataBuffer,
             FFI::addr($status)
