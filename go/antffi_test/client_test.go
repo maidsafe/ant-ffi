@@ -504,7 +504,7 @@ func TestE2EUploadDownloadRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DataPutPublic failed: %v", err)
 	}
-	t.Logf("Upload successful! Address: %s, Cost: %s", result.Address, result.Cost)
+	t.Logf("Upload successful! Address: %s, Price: %s", result.Address, result.Price)
 
 	// 5. Download data
 	t.Log("Downloading data...")

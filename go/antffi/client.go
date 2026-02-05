@@ -1366,7 +1366,7 @@ func (c *Client) DirDownload(ctx context.Context, dataMap *PrivateArchiveDataMap
 	destPathBuffer := stringToRustBuffer(destPath)
 
 	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_dir_download(cloned, dataMapCloned, destPathBuffer))
-	_, err := pollVoidFuture(ctx, futureHandle)
+	err := pollVoidFuture(ctx, futureHandle)
 	return err
 }
 
@@ -1391,6 +1391,6 @@ func (c *Client) DirDownloadPublic(ctx context.Context, address *ArchiveAddress,
 	destPathBuffer := stringToRustBuffer(destPath)
 
 	futureHandle := uint64(C.uniffi_ant_ffi_fn_method_client_dir_download_public(cloned, addressCloned, destPathBuffer))
-	_, err := pollVoidFuture(ctx, futureHandle)
+	err := pollVoidFuture(ctx, futureHandle)
 	return err
 }
