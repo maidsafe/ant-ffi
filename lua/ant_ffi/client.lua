@@ -237,6 +237,24 @@ function Client:data_get(data_map_chunk)
     return M._helpers.rustbuffer_to_string(result)
 end
 
+--[[
+  Get the estimated cost to store data on the network (blocking).
+  @param data (string) - Data to estimate cost for
+  @return string - The estimated cost in tokens
+]]
+function Client:data_cost(data)
+    assert(not self._disposed, "Client has been disposed")
+
+    local data_buf = M._helpers.string_to_rustbuffer(data)
+
+    local future = M._lib.uniffi_ant_ffi_fn_method_client_data_cost(
+        self:_clone(), data_buf)
+    local result, status = poll_rust_buffer_sync(M._lib, future)
+    M._errors.check_status(status, "Client.data_cost")
+
+    return M._helpers.rustbuffer_to_string(result)
+end
+
 -- =============================================================================
 -- Chunk Operations
 -- =============================================================================

@@ -170,6 +170,32 @@ class Client {
     return result;
   }
 
+  /// Gets the estimated cost to upload data to the network.
+  ///
+  /// Use this to show a quote before the user confirms an upload.
+  ///
+  /// Example:
+  /// ```dart
+  /// final cost = await client.dataCost(fileBytes);
+  /// print('Estimated cost: $cost');
+  /// ```
+  Future<String> dataCost(Uint8List data) async {
+    _checkNotDisposed();
+
+    final dataBuffer = uint8ListToRustBuffer(data);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_data_cost(
+      _clone(),
+      dataBuffer,
+    );
+
+    final resultBuffer = await pollRustBufferAsync(futureHandle);
+    final result = rustBufferToString(resultBuffer);
+    resultBuffer.free();
+
+    return result;
+  }
+
   /// Releases the native resources associated with this client.
   void dispose() {
     if (_disposed) return;
