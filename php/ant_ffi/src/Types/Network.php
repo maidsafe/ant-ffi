@@ -54,20 +54,31 @@ final class Network extends NativeHandle
 
     /**
      * Create a custom network configuration.
+     *
+     * @param string $rpcUrl RPC URL for the EVM network
+     * @param string $paymentTokenAddress Payment token contract address (hex string)
+     * @param string $dataPaymentsAddress Data payments contract address (hex string)
+     * @param string|null $royaltiesPkHex Optional royalties public key (hex string)
      */
-    public static function custom(string $rpcUrl, string $paymentTokenAddress, string $dataPaymentsAddress): self
-    {
+    public static function custom(
+        string $rpcUrl,
+        string $paymentTokenAddress,
+        string $dataPaymentsAddress,
+        ?string $royaltiesPkHex = null
+    ): self {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
         $rpcBuffer = RustBuffer::fromString($rpcUrl);
         $tokenBuffer = RustBuffer::fromString($paymentTokenAddress);
         $paymentsBuffer = RustBuffer::fromString($dataPaymentsAddress);
+        $royaltiesBuffer = RustBuffer::fromOptionString($royaltiesPkHex);
 
         $handle = $ffi->uniffi_ant_ffi_fn_constructor_network_custom(
             $rpcBuffer,
             $tokenBuffer,
             $paymentsBuffer,
+            $royaltiesBuffer,
             FFI::addr($status)
         );
 

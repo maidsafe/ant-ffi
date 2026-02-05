@@ -15,12 +15,36 @@ final class RustBuffer
     /**
      * Create a RustBuffer from a PHP string with UniFFI length prefix.
      * UniFFI format: 4-byte big-endian length + UTF-8 data
+     * Use this for functions that expect serialized UniFFI strings.
      */
     public static function fromString(string $str): CData
     {
         $len = strlen($str);
         $prefixedData = pack('N', $len) . $str;
         return self::fromBytes($prefixedData);
+    }
+
+    /**
+     * Create a RustBuffer from a raw string (no length prefix).
+     * Use this for functions that expect raw string data (e.g., hex parsing).
+     */
+    public static function fromRawString(string $str): CData
+    {
+        return self::fromBytes($str);
+    }
+
+    /**
+     * Create a RustBuffer from an optional string with UniFFI format.
+     * UniFFI format: 1 byte (0=None, 1=Some) + if Some: 4-byte BE length + UTF-8 data
+     */
+    public static function fromOptionString(?string $str): CData
+    {
+        if ($str === null) {
+            return self::fromBytes(pack('C', 0)); // None
+        }
+        $len = strlen($str);
+        $data = pack('C', 1) . pack('N', $len) . $str; // Some + length + data
+        return self::fromBytes($data);
     }
 
     /**
@@ -52,7 +76,8 @@ final class RustBuffer
     }
 
     /**
-     * Extract string from RustBuffer (with UniFFI length prefix).
+     * Extract string from RustBuffer (auto-detects format).
+     * Handles both length-prefixed (UniFFI) and raw strings.
      */
     public static function toString(CData $buffer): string
     {
@@ -62,13 +87,31 @@ final class RustBuffer
 
         $data = FFI::string($buffer->data, $buffer->len);
 
-        // Parse UniFFI format: 4-byte big-endian length + data
         if (strlen($data) < 4) {
-            return '';
+            return $data; // Too short for prefix, return as-is
         }
 
+        // Try to parse UniFFI format: 4-byte big-endian length + data
         $len = unpack('N', substr($data, 0, 4))[1];
-        return substr($data, 4, $len);
+
+        // Validate: length must make sense for the buffer
+        if ($len > 0 && $len <= strlen($data) - 4) {
+            return substr($data, 4, $len);
+        }
+
+        // No valid prefix found, return raw string
+        return $data;
+    }
+
+    /**
+     * Extract raw string/bytes from RustBuffer (no prefix parsing).
+     */
+    public static function toRawString(CData $buffer): string
+    {
+        if ($buffer->len === 0) {
+            return '';
+        }
+        return FFI::string($buffer->data, $buffer->len);
     }
 
     /**
@@ -101,7 +144,7 @@ final class RustBuffer
             $message = 'FFI call failed';
             if ($status->error_buf->len > 0) {
                 try {
-                    $message = self::toString($status->error_buf);
+                    $message = self::parseErrorBuffer($status->error_buf);
                 } catch (\Throwable $e) {
                     // Fallback if we can't parse the error
                     $message = "FFI call failed with code {$status->code}";
@@ -109,6 +152,29 @@ final class RustBuffer
             }
             throw new AntFfiException($message, $status->code);
         }
+    }
+
+    /**
+     * Parse UniFFI error buffer format.
+     * Format: 4-byte variant + 4-byte string length + string data
+     */
+    private static function parseErrorBuffer(CData $buffer): string
+    {
+        if ($buffer->len < 8) {
+            return self::toString($buffer);
+        }
+
+        $data = FFI::string($buffer->data, $buffer->len);
+
+        // Skip 4-byte variant, read 4-byte string length
+        $strLen = unpack('N', substr($data, 4, 4))[1];
+
+        if ($strLen > 0 && $strLen <= strlen($data) - 8) {
+            return substr($data, 8, $strLen);
+        }
+
+        // Fallback to regular parsing
+        return self::toString($buffer);
     }
 
     /**

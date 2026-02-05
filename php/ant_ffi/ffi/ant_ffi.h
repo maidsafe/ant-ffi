@@ -72,7 +72,7 @@ void *uniffi_ant_ffi_fn_clone_dataaddress(void *ptr, RustCallStatus *out_status)
 
 // Network
 void *uniffi_ant_ffi_fn_constructor_network_new(int8_t is_local, RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_constructor_network_custom(RustBuffer rpc_url, RustBuffer payment_token_address, RustBuffer data_payments_address, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_network_custom(RustBuffer rpc_url, RustBuffer payment_token_address, RustBuffer data_payments_address, RustBuffer royalties_pk_hex, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_network(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_network(void *ptr, RustCallStatus *out_status);
 
@@ -86,12 +86,20 @@ void *uniffi_ant_ffi_fn_clone_wallet(void *ptr, RustCallStatus *out_status);
 uint64_t uniffi_ant_ffi_fn_constructor_client_init(void);
 uint64_t uniffi_ant_ffi_fn_constructor_client_init_local(void);
 uint64_t uniffi_ant_ffi_fn_constructor_client_init_with_peers(RustBuffer peers, void *network, RustBuffer data_dir);
+
+// Client - Synchronous constructors (blocking, avoids UniFFI async issues)
+void *uniffi_ant_ffi_fn_constructor_client_init_local_sync(RustCallStatus *out_status);
+
 void uniffi_ant_ffi_fn_free_client(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_client(void *ptr, RustCallStatus *out_status);
 
 // Client - Data Operations (Async - returns future handle)
 uint64_t uniffi_ant_ffi_fn_method_client_data_put_public(void *ptr, RustBuffer data, RustBuffer payment);
 uint64_t uniffi_ant_ffi_fn_method_client_data_get_public(void *ptr, RustBuffer address_hex);
+
+// Client - Data Operations (Synchronous - blocking, avoids UniFFI async issues)
+void uniffi_ant_ffi_fn_method_client_data_put_public_sync(RustBuffer *out_result, void *ptr, RustBuffer data, RustBuffer payment, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_method_client_data_get_public_sync(RustBuffer *out_result, void *ptr, RustBuffer address_hex, RustCallStatus *out_status);
 
 // Async Future Handling - Pointer results
 void ffi_ant_ffi_rust_future_poll_pointer(uint64_t handle, void *callback, uint64_t callback_data);
