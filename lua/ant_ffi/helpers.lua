@@ -336,6 +336,56 @@ function M.lower_payment_option(wallet)
 end
 
 --[[
+  Convert an optional Lua string to RustBuffer with UniFFI Option serialization.
+  None: 1 byte (0)
+  Some: 1 byte (1) + 4-byte big-endian length + UTF-8 data
+
+  @param str (string or nil) - The optional Lua string to convert
+  @return RustBuffer - The serialized Option<String> buffer
+]]
+function M.option_string_to_rustbuffer(str)
+    assert(M.lib, "helpers not initialized - call helpers.init(lib) first")
+
+    local buf
+    local total_len
+
+    if str == nil then
+        -- None variant: just a 0 byte
+        total_len = 1
+        buf = ffi.new("uint8_t[?]", total_len)
+        buf[0] = 0
+    else
+        -- Some variant: 1 byte + 4-byte BE length + UTF-8 data
+        local len = #str
+        total_len = 1 + 4 + len
+        buf = ffi.new("uint8_t[?]", total_len)
+        buf[0] = 1  -- Some
+        buf[1] = bit.band(bit.rshift(len, 24), 0xFF)
+        buf[2] = bit.band(bit.rshift(len, 16), 0xFF)
+        buf[3] = bit.band(bit.rshift(len, 8), 0xFF)
+        buf[4] = bit.band(len, 0xFF)
+        if len > 0 then
+            ffi.copy(buf + 5, str, len)
+        end
+    end
+
+    -- Create ForeignBytes pointing to our buffer
+    local fb = ffi.new("ForeignBytes")
+    fb.len = total_len
+    fb.data = buf
+
+    -- Convert to RustBuffer
+    local status = M.new_status()
+    local result = M.lib.ffi_ant_ffi_rustbuffer_from_bytes(fb, status)
+
+    -- Check for errors
+    local errors = require("ant_ffi.errors")
+    errors.check_status(status, "option_string_to_rustbuffer")
+
+    return result
+end
+
+--[[
   Convert RustBuffer to Lua string WITHOUT parsing UniFFI serialization.
   Returns the raw buffer contents as-is.
 

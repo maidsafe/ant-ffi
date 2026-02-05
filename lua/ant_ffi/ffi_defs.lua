@@ -367,7 +367,7 @@ void *uniffi_ant_ffi_fn_clone_userdata(void *ptr, RustCallStatus *out_status);
 // =============================================================================
 
 void *uniffi_ant_ffi_fn_constructor_network_new(int8_t is_local, RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_constructor_network_custom(RustBuffer rpc_url, RustBuffer payment_token_address, RustBuffer data_payments_address, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_network_custom(RustBuffer rpc_url, RustBuffer payment_token_address, RustBuffer data_payments_address, RustBuffer royalties_pk_hex, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_network(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_network(void *ptr, RustCallStatus *out_status);
 
