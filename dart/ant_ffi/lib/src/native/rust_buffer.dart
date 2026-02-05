@@ -89,6 +89,47 @@ RustBuffer stringToRustBuffer(String str) {
   return rawBytesToRustBuffer(bytes);
 }
 
+/// Creates a RustBuffer from an optional String in UniFFI Option format.
+/// None: 1 byte (0)
+/// Some: 1 byte (1) + 4-byte big-endian length + UTF-8 bytes
+RustBuffer optionStringToRustBuffer(String? str) {
+  final status = calloc<RustCallStatus>();
+  try {
+    Uint8List serialized;
+    if (str == null) {
+      // None variant: just a 0 byte
+      serialized = Uint8List(1);
+      serialized[0] = 0;
+    } else {
+      // Some variant: 1 byte + 4-byte BE length + UTF-8 data
+      final strBytes = utf8.encode(str);
+      final len = strBytes.length;
+      serialized = Uint8List(1 + 4 + len);
+      serialized[0] = 1; // Some
+      serialized[1] = (len >> 24) & 0xFF;
+      serialized[2] = (len >> 16) & 0xFF;
+      serialized[3] = (len >> 8) & 0xFF;
+      serialized[4] = len & 0xFF;
+      serialized.setRange(5, 5 + len, strBytes);
+    }
+
+    final foreignBytes = calloc<ForeignBytes>();
+    foreignBytes.ref.len = serialized.length;
+    foreignBytes.ref.data = calloc<Uint8>(serialized.length);
+    foreignBytes.ref.data.cast<Uint8>().asTypedList(serialized.length).setAll(0, serialized);
+
+    final buffer = _bindings.ffi_ant_ffi_rustbuffer_from_bytes(foreignBytes.ref, status);
+    _checkStatus(status.ref);
+
+    calloc.free(foreignBytes.ref.data);
+    calloc.free(foreignBytes);
+
+    return buffer;
+  } finally {
+    calloc.free(status);
+  }
+}
+
 /// Extracts a Uint8List from a RustBuffer with UniFFI length prefix.
 /// Used for Vec<u8> data inside compound types (records).
 Uint8List rustBufferToUint8ListWithPrefix(RustBuffer buffer) {

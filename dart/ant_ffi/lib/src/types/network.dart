@@ -58,16 +58,19 @@ class Network {
     required String rpcUrl,
     required String paymentTokenAddress,
     required String dataPaymentsAddress,
+    String? royaltiesPkHex,
   }) {
     final status = calloc<RustCallStatus>();
     try {
       final rpcBuffer = stringToRustBuffer(rpcUrl);
       final tokenBuffer = stringToRustBuffer(paymentTokenAddress);
       final dataBuffer = stringToRustBuffer(dataPaymentsAddress);
+      final royaltiesBuffer = optionStringToRustBuffer(royaltiesPkHex);
       final handle = _bindings.uniffi_ant_ffi_fn_constructor_network_custom(
         rpcBuffer,
         tokenBuffer,
         dataBuffer,
+        royaltiesBuffer,
         status,
       );
       _checkStatus(status.ref);

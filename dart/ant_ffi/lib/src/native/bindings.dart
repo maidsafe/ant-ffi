@@ -3081,12 +3081,14 @@ class AntFfiBindings {
     RustBuffer rpc_url,
     RustBuffer payment_token_address,
     RustBuffer data_payments_address,
+    RustBuffer royalties_pk_hex,
     ffi.Pointer<RustCallStatus> out_status,
   ) {
     return _uniffi_ant_ffi_fn_constructor_network_custom(
       rpc_url,
       payment_token_address,
       data_payments_address,
+      royalties_pk_hex,
       out_status,
     );
   }
@@ -3094,12 +3096,12 @@ class AntFfiBindings {
   late final _uniffi_ant_ffi_fn_constructor_network_customPtr = _lookup<
           ffi.NativeFunction<
               ffi.Pointer<ffi.Void> Function(RustBuffer, RustBuffer, RustBuffer,
-                  ffi.Pointer<RustCallStatus>)>>(
+                  RustBuffer, ffi.Pointer<RustCallStatus>)>>(
       'uniffi_ant_ffi_fn_constructor_network_custom');
   late final _uniffi_ant_ffi_fn_constructor_network_custom =
       _uniffi_ant_ffi_fn_constructor_network_customPtr.asFunction<
           ffi.Pointer<ffi.Void> Function(RustBuffer, RustBuffer, RustBuffer,
-              ffi.Pointer<RustCallStatus>)>();
+              RustBuffer, ffi.Pointer<RustCallStatus>)>();
 
   ffi.Pointer<ffi.Void> uniffi_ant_ffi_fn_constructor_network_new(
     int is_local,
