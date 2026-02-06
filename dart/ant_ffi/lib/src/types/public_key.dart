@@ -34,6 +34,9 @@ class PublicKey {
     }
   }
 
+  /// Returns a cloned handle for use by other types (e.g., key derivation).
+  Pointer<Void> cloneHandle() => _clone();
+
   /// Creates a public key from a hex-encoded string.
   ///
   /// Throws [AntFfiException] if the hex string is invalid.

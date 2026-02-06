@@ -1729,3 +1729,582 @@ pub fn client_data_cost_blocking(
         Ok(cost.to_string())
     })
 }
+
+// =============================================================================
+// Additional blocking wrappers for private data, pointers, scratchpads, etc.
+// =============================================================================
+
+/// Upload private data to the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_data_put_blocking(
+    client: Arc<Client>,
+    data: Vec<u8>,
+    wallet: Arc<Wallet>,
+) -> Result<DataPutResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let bytes = Bytes::from(data);
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (cost, data_map) = client
+            .inner
+            .data_put(bytes, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(DataPutResult {
+            cost: cost.to_string(),
+            data_map: Arc::new(DataMapChunk { inner: data_map }),
+        })
+    })
+}
+
+/// Fetch private data from the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_data_get_blocking(
+    client: Arc<Client>,
+    data_map: Arc<DataMapChunk>,
+) -> Result<Vec<u8>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let bytes = client
+            .inner
+            .data_get(&data_map.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(bytes.to_vec())
+    })
+}
+
+// =============================================================================
+// Pointer blocking wrappers
+// =============================================================================
+
+/// Get a pointer from the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_pointer_get_blocking(
+    client: Arc<Client>,
+    addr: Arc<PointerAddress>,
+) -> Result<Arc<NetworkPointer>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let pointer = client
+            .inner
+            .pointer_get(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(NetworkPointer { inner: pointer }))
+    })
+}
+
+/// Store a pointer on the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_pointer_put_blocking(
+    client: Arc<Client>,
+    pointer: Arc<NetworkPointer>,
+    wallet: Arc<Wallet>,
+) -> Result<Arc<PointerAddress>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (_cost, addr) = client
+            .inner
+            .pointer_put(pointer.inner.clone(), autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(PointerAddress { inner: addr }))
+    })
+}
+
+/// Create a new pointer on the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_pointer_create_blocking(
+    client: Arc<Client>,
+    owner: Arc<SecretKey>,
+    target: Arc<PointerTarget>,
+    wallet: Arc<Wallet>,
+) -> Result<PointerCreateResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (cost, addr) = client
+            .inner
+            .pointer_create(&owner.inner, target.inner.clone(), autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(PointerCreateResult {
+            cost: cost.to_string(),
+            address: Arc::new(PointerAddress { inner: addr }),
+        })
+    })
+}
+
+/// Update an existing pointer (blocking/synchronous).
+/// This operation is free as the pointer was already paid for.
+#[uniffi::export]
+pub fn client_pointer_update_blocking(
+    client: Arc<Client>,
+    owner: Arc<SecretKey>,
+    target: Arc<PointerTarget>,
+) -> Result<(), ClientError> {
+    get_blocking_runtime().block_on(async {
+        client
+            .inner
+            .pointer_update(&owner.inner, target.inner.clone())
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    })
+}
+
+// =============================================================================
+// Scratchpad blocking wrappers
+// =============================================================================
+
+/// Get a scratchpad from the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_scratchpad_get_blocking(
+    client: Arc<Client>,
+    addr: Arc<ScratchpadAddress>,
+) -> Result<Arc<Scratchpad>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let scratchpad = client
+            .inner
+            .scratchpad_get(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(Scratchpad { inner: scratchpad }))
+    })
+}
+
+/// Store a scratchpad on the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_scratchpad_put_blocking(
+    client: Arc<Client>,
+    scratchpad: Arc<Scratchpad>,
+    wallet: Arc<Wallet>,
+) -> Result<ScratchpadCreateResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (cost, addr) = client
+            .inner
+            .scratchpad_put(scratchpad.inner.clone(), autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(ScratchpadCreateResult {
+            cost: cost.to_string(),
+            address: Arc::new(ScratchpadAddress { inner: addr }),
+        })
+    })
+}
+
+/// Create a new scratchpad on the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_scratchpad_create_blocking(
+    client: Arc<Client>,
+    owner: Arc<SecretKey>,
+    content_type: u64,
+    initial_data: Vec<u8>,
+    wallet: Arc<Wallet>,
+) -> Result<ScratchpadCreateResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (cost, addr) = client
+            .inner
+            .scratchpad_create(
+                &owner.inner,
+                content_type,
+                &Bytes::from(initial_data),
+                autonomi_payment,
+            )
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(ScratchpadCreateResult {
+            cost: cost.to_string(),
+            address: Arc::new(ScratchpadAddress { inner: addr }),
+        })
+    })
+}
+
+/// Update an existing scratchpad (blocking/synchronous).
+/// This operation is free as the scratchpad was already paid for.
+#[uniffi::export]
+pub fn client_scratchpad_update_blocking(
+    client: Arc<Client>,
+    owner: Arc<SecretKey>,
+    content_type: u64,
+    data: Vec<u8>,
+) -> Result<(), ClientError> {
+    get_blocking_runtime().block_on(async {
+        client
+            .inner
+            .scratchpad_update(&owner.inner, content_type, &Bytes::from(data))
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    })
+}
+
+// =============================================================================
+// Register blocking wrappers
+// =============================================================================
+
+/// Create a new register on the network (blocking/synchronous).
+/// Value must be exactly 32 bytes.
+#[uniffi::export]
+pub fn client_register_create_blocking(
+    client: Arc<Client>,
+    owner: Arc<SecretKey>,
+    value: Vec<u8>,
+    wallet: Arc<Wallet>,
+) -> Result<RegisterCreateResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        if value.len() != 32 {
+            return Err(ClientError::NetworkError {
+                reason: format!(
+                    "Register value must be exactly 32 bytes, got {}",
+                    value.len()
+                ),
+            });
+        }
+        let mut value_array = [0u8; 32];
+        value_array.copy_from_slice(&value);
+
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (cost, addr) = client
+            .inner
+            .register_create(&owner.inner, value_array, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(RegisterCreateResult {
+            cost: cost.to_string(),
+            address: Arc::new(RegisterAddress { inner: addr }),
+        })
+    })
+}
+
+/// Get a register value from the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_register_get_blocking(
+    client: Arc<Client>,
+    address: Arc<RegisterAddress>,
+) -> Result<Vec<u8>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let value = client
+            .inner
+            .register_get(&address.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(value.to_vec())
+    })
+}
+
+/// Update an existing register (blocking/synchronous).
+/// Value must be exactly 32 bytes. Returns the cost.
+#[uniffi::export]
+pub fn client_register_update_blocking(
+    client: Arc<Client>,
+    owner: Arc<SecretKey>,
+    value: Vec<u8>,
+    wallet: Arc<Wallet>,
+) -> Result<String, ClientError> {
+    get_blocking_runtime().block_on(async {
+        if value.len() != 32 {
+            return Err(ClientError::NetworkError {
+                reason: format!(
+                    "Register value must be exactly 32 bytes, got {}",
+                    value.len()
+                ),
+            });
+        }
+        let mut value_array = [0u8; 32];
+        value_array.copy_from_slice(&value);
+
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let cost = client
+            .inner
+            .register_update(&owner.inner, value_array, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    })
+}
+
+// =============================================================================
+// Graph Entry blocking wrappers
+// =============================================================================
+
+/// Get a graph entry from the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_graph_entry_get_blocking(
+    client: Arc<Client>,
+    addr: Arc<GraphEntryAddress>,
+) -> Result<Arc<GraphEntry>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let entry = client
+            .inner
+            .graph_entry_get(&addr.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(GraphEntry { inner: entry }))
+    })
+}
+
+/// Put a graph entry to the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_graph_entry_put_blocking(
+    client: Arc<Client>,
+    entry: Arc<GraphEntry>,
+    wallet: Arc<Wallet>,
+) -> Result<GraphEntryPutResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (cost, addr) = client
+            .inner
+            .graph_entry_put(entry.inner.clone(), autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(GraphEntryPutResult {
+            cost: cost.to_string(),
+            address: Arc::new(GraphEntryAddress { inner: addr }),
+        })
+    })
+}
+
+// =============================================================================
+// Vault blocking wrappers
+// =============================================================================
+
+/// Get user data from a vault (blocking/synchronous).
+#[uniffi::export]
+pub fn client_vault_get_user_data_blocking(
+    client: Arc<Client>,
+    key: Arc<VaultSecretKey>,
+) -> Result<Arc<UserData>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let user_data = client
+            .inner
+            .vault_get_user_data(&key.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(UserData { inner: user_data }))
+    })
+}
+
+/// Put user data to a vault (blocking/synchronous).
+#[uniffi::export]
+pub fn client_vault_put_user_data_blocking(
+    client: Arc<Client>,
+    key: Arc<VaultSecretKey>,
+    wallet: Arc<Wallet>,
+    user_data: Arc<UserData>,
+) -> Result<String, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let cost = client
+            .inner
+            .vault_put_user_data(&key.inner, autonomi_payment, user_data.inner.clone())
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    })
+}
+
+// =============================================================================
+// Archive blocking wrappers
+// =============================================================================
+
+/// Fetch a public archive from the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_archive_get_public_blocking(
+    client: Arc<Client>,
+    address: Arc<ArchiveAddress>,
+) -> Result<Arc<PublicArchive>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let archive = client
+            .inner
+            .archive_get_public(&address.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(Arc::new(PublicArchive { inner: archive }))
+    })
+}
+
+/// Upload a public archive to the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_archive_put_public_blocking(
+    client: Arc<Client>,
+    archive: Arc<PublicArchive>,
+    wallet: Arc<Wallet>,
+) -> Result<PublicArchivePutResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (cost, addr) = client
+            .inner
+            .archive_put_public(&archive.inner, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(PublicArchivePutResult {
+            cost: cost.to_string(),
+            address: Arc::new(ArchiveAddress { inner: addr }),
+        })
+    })
+}
+
+// =============================================================================
+// File blocking wrappers
+// =============================================================================
+
+/// Upload a private file to the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_file_upload_blocking(
+    client: Arc<Client>,
+    path: String,
+    wallet: Arc<Wallet>,
+) -> Result<FileUploadResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (cost, data_map) = client
+            .inner
+            .file_content_upload(path, autonomi_payment.into())
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(FileUploadResult {
+            cost: cost.to_string(),
+            data_map: Arc::new(DataMapChunk { inner: data_map }),
+        })
+    })
+}
+
+/// Upload a public file to the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_file_upload_public_blocking(
+    client: Arc<Client>,
+    path: String,
+    wallet: Arc<Wallet>,
+) -> Result<FileUploadPublicResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let path = std::path::PathBuf::from(path);
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (cost, addr) = client
+            .inner
+            .file_content_upload_public(path, autonomi_payment.into())
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(FileUploadPublicResult {
+            cost: cost.to_string(),
+            address: Arc::new(DataAddress { inner: addr }),
+        })
+    })
+}
+
+/// Download a private file from the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_file_download_blocking(
+    client: Arc<Client>,
+    data_map: Arc<DataMapChunk>,
+    path: String,
+) -> Result<(), ClientError> {
+    get_blocking_runtime().block_on(async {
+        let path = std::path::PathBuf::from(path);
+        client
+            .inner
+            .file_download(&data_map.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    })
+}
+
+/// Download a public file from the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_file_download_public_blocking(
+    client: Arc<Client>,
+    address: Arc<DataAddress>,
+    path: String,
+) -> Result<(), ClientError> {
+    get_blocking_runtime().block_on(async {
+        let path = std::path::PathBuf::from(path);
+        client
+            .inner
+            .file_download_public(&address.inner, path)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(())
+    })
+}

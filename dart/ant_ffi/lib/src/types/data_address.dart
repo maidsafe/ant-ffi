@@ -34,6 +34,9 @@ class DataAddress {
     }
   }
 
+  /// Returns a cloned handle for use by other types (e.g., archives).
+  Pointer<Void> cloneHandle() => _clone();
+
   /// Creates a data address from a hex-encoded string.
   factory DataAddress.fromHex(String hex) {
     final status = calloc<RustCallStatus>();

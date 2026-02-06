@@ -46,8 +46,10 @@ final class FFILoader
 
         // Try to load from common locations
         $searchPaths = [
+            __DIR__ . '/../ffi/',
             __DIR__ . '/../',
             __DIR__ . '/../../',
+            __DIR__ . '/../../rust/target/release/',
             getenv('ANT_FFI_LIB_PATH') ?: '',
         ];
 

@@ -237,6 +237,192 @@ function Client:data_get(data_map_chunk)
     return M._helpers.rustbuffer_to_string(result)
 end
 
+--[[
+  Estimate the cost to store data on the network (blocking).
+  @param data (string) - Data to estimate cost for
+  @return string - The estimated cost (in tokens)
+]]
+function Client:data_cost(data)
+    assert(not self._disposed, "Client has been disposed")
+
+    local data_buf = M._helpers.string_to_rustbuffer(data)
+
+    local future = M._lib.uniffi_ant_ffi_fn_method_client_data_cost(
+        self:_clone(), data_buf)
+    local result, status = poll_rust_buffer_sync(M._lib, future)
+    M._errors.check_status(status, "Client.data_cost")
+
+    return M._helpers.rustbuffer_to_string(result)
+end
+
+-- =============================================================================
+-- File Operations
+-- =============================================================================
+
+--[[
+  Upload a file to the network as public data (blocking).
+  @param file_path (string) - Path to the file to upload
+  @param wallet (Wallet) - Wallet for payment
+  @return DataAddress, string (address, cost)
+]]
+function Client:file_upload_public(file_path, wallet)
+    assert(not self._disposed, "Client has been disposed")
+    local data_mod = require("ant_ffi.data")
+    local bit = require("bit")
+
+    local path_buf = M._helpers.string_to_rustbuffer(file_path)
+    local payment_buf = M._helpers.lower_payment_option(wallet)
+
+    local future = M._lib.uniffi_ant_ffi_fn_method_client_file_upload_public(
+        self:_clone(), path_buf, payment_buf)
+    -- Returns RustBuffer containing FileUploadPublicResult { cost: String, address: Arc<DataAddress> }
+    local result_buf, status = poll_rust_buffer_sync(M._lib, future)
+    M._errors.check_status(status, "Client.file_upload_public")
+
+    -- Deserialize FileUploadPublicResult: cost string + pointer
+    -- Read cost string
+    local cost_len = bit.bor(
+        bit.lshift(result_buf.data[0], 24),
+        bit.lshift(result_buf.data[1], 16),
+        bit.lshift(result_buf.data[2], 8),
+        result_buf.data[3]
+    )
+    local cost = ffi.string(result_buf.data + 4, cost_len)
+
+    -- Read address pointer (8 bytes big-endian)
+    local offset = 4 + cost_len
+    local lo = bit.bor(
+        bit.lshift(result_buf.data[offset + 4], 24),
+        bit.lshift(result_buf.data[offset + 5], 16),
+        bit.lshift(result_buf.data[offset + 6], 8),
+        result_buf.data[offset + 7]
+    )
+    local hi = bit.bor(
+        bit.lshift(result_buf.data[offset], 24),
+        bit.lshift(result_buf.data[offset + 1], 16),
+        bit.lshift(result_buf.data[offset + 2], 8),
+        result_buf.data[offset + 3]
+    )
+    -- Combine high and low parts
+    local ptr_val = hi * 0x100000000ULL + lo
+    local address_handle = ffi.cast("void*", ffi.cast("uintptr_t", ptr_val))
+
+    M._helpers.free_rustbuffer(result_buf)
+
+    return data_mod.DataAddress._wrap(address_handle), cost
+end
+
+--[[
+  Download a file from the network (public data) to a local path (blocking).
+  @param address (DataAddress) - Address of the file to download
+  @param dest_path (string) - Destination path to save the file
+]]
+function Client:file_download_public(address, dest_path)
+    assert(not self._disposed, "Client has been disposed")
+
+    local path_buf = M._helpers.string_to_rustbuffer(dest_path)
+
+    local future = M._lib.uniffi_ant_ffi_fn_method_client_file_download_public(
+        self:_clone(), address:_clone(), path_buf)
+    local status = poll_void_sync(M._lib, future)
+    M._errors.check_status(status, "Client.file_download_public")
+end
+
+--[[
+  Upload a file to the network as private (encrypted) data (blocking).
+  @param file_path (string) - Path to the file to upload
+  @param wallet (Wallet) - Wallet for payment
+  @return DataMapChunk, string (data_map, cost)
+]]
+function Client:file_upload(file_path, wallet)
+    assert(not self._disposed, "Client has been disposed")
+    local data_mod = require("ant_ffi.data")
+    local bit = require("bit")
+
+    local path_buf = M._helpers.string_to_rustbuffer(file_path)
+    local payment_buf = M._helpers.lower_payment_option(wallet)
+
+    local future = M._lib.uniffi_ant_ffi_fn_method_client_file_upload(
+        self:_clone(), path_buf, payment_buf)
+    -- Returns RustBuffer containing FileUploadResult { cost: String, data_map: Arc<DataMapChunk> }
+    local result_buf, status = poll_rust_buffer_sync(M._lib, future)
+    M._errors.check_status(status, "Client.file_upload")
+
+    -- Deserialize FileUploadResult: cost string + pointer
+    -- Read cost string
+    local cost_len = bit.bor(
+        bit.lshift(result_buf.data[0], 24),
+        bit.lshift(result_buf.data[1], 16),
+        bit.lshift(result_buf.data[2], 8),
+        result_buf.data[3]
+    )
+    local cost = ffi.string(result_buf.data + 4, cost_len)
+
+    -- Read data_map pointer (8 bytes big-endian)
+    local offset = 4 + cost_len
+    local lo = bit.bor(
+        bit.lshift(result_buf.data[offset + 4], 24),
+        bit.lshift(result_buf.data[offset + 5], 16),
+        bit.lshift(result_buf.data[offset + 6], 8),
+        result_buf.data[offset + 7]
+    )
+    local hi = bit.bor(
+        bit.lshift(result_buf.data[offset], 24),
+        bit.lshift(result_buf.data[offset + 1], 16),
+        bit.lshift(result_buf.data[offset + 2], 8),
+        result_buf.data[offset + 3]
+    )
+    -- Combine high and low parts
+    local ptr_val = hi * 0x100000000ULL + lo
+    local data_map_handle = ffi.cast("void*", ffi.cast("uintptr_t", ptr_val))
+
+    M._helpers.free_rustbuffer(result_buf)
+
+    return data_mod.DataMapChunk._wrap(data_map_handle), cost
+end
+
+--[[
+  Download a file from the network (private data) to a local path (blocking).
+  @param data_map_chunk (DataMapChunk) - Data map for the encrypted file
+  @param dest_path (string) - Destination path to save the file
+]]
+function Client:file_download(data_map_chunk, dest_path)
+    assert(not self._disposed, "Client has been disposed")
+
+    local path_buf = M._helpers.string_to_rustbuffer(dest_path)
+
+    local future = M._lib.uniffi_ant_ffi_fn_method_client_file_download(
+        self:_clone(), data_map_chunk:_clone(), path_buf)
+    local status = poll_void_sync(M._lib, future)
+    M._errors.check_status(status, "Client.file_download")
+end
+
+--[[
+  Estimate the cost to upload a file to the network (blocking).
+  @param file_path (string) - Path to the file
+  @param follow_symlinks (boolean, optional) - Whether to follow symbolic links (default: true)
+  @param include_hidden (boolean, optional) - Whether to include hidden files (default: false)
+  @return string - The estimated cost (in tokens)
+]]
+function Client:file_cost(file_path, follow_symlinks, include_hidden)
+    assert(not self._disposed, "Client has been disposed")
+
+    -- Default values
+    if follow_symlinks == nil then follow_symlinks = true end
+    if include_hidden == nil then include_hidden = false end
+
+    local path_buf = M._helpers.string_to_rustbuffer(file_path)
+
+    local future = M._lib.uniffi_ant_ffi_fn_method_client_file_cost(
+        self:_clone(), path_buf,
+        follow_symlinks and 1 or 0,
+        include_hidden and 1 or 0)
+    local result, status = poll_rust_buffer_sync(M._lib, future)
+    M._errors.check_status(status, "Client.file_cost")
+
+    return M._helpers.rustbuffer_to_string(result)
+end
+
 -- =============================================================================
 -- Chunk Operations
 -- =============================================================================
