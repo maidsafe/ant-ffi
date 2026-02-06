@@ -3,8 +3,16 @@ name: C# CI
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'csharp/**'
+      - 'rust/**'
+      - '.github/workflows/csharp.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'csharp/**'
+      - 'rust/**'
+      - '.github/workflows/csharp.yml'
 
 jobs:
   build:

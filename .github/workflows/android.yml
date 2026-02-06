@@ -3,8 +3,16 @@ name: Android CI
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'android/**'
+      - 'rust/**'
+      - '.github/workflows/android.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'android/**'
+      - 'rust/**'
+      - '.github/workflows/android.yml'
 
 jobs:
   build:
