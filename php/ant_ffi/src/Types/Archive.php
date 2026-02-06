@@ -78,14 +78,15 @@ final class ArchiveAddress extends NativeHandle
 final class Metadata extends NativeHandle
 {
     /**
-     * Create new empty metadata.
+     * Create metadata with a file size.
      */
-    public static function create(): self
+    public static function create(int $size): self
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
         $handle = $ffi->uniffi_ant_ffi_fn_constructor_metadata_new(
+            $size,
             FFI::addr($status)
         );
 
@@ -95,15 +96,29 @@ final class Metadata extends NativeHandle
     }
 
     /**
-     * Create metadata with a file size.
+     * Alias for create() for backwards compatibility.
      */
     public static function withSize(int $size): self
+    {
+        return self::create($size);
+    }
+
+    /**
+     * Create metadata with timestamps.
+     *
+     * @param int $size File size in bytes
+     * @param int $created Created timestamp (Unix seconds)
+     * @param int $modified Modified timestamp (Unix seconds)
+     */
+    public static function withTimestamps(int $size, int $created, int $modified): self
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
-        $handle = $ffi->uniffi_ant_ffi_fn_constructor_metadata_with_size(
+        $handle = $ffi->uniffi_ant_ffi_fn_constructor_metadata_with_timestamps(
             $size,
+            $created,
+            $modified,
             FFI::addr($status)
         );
 
@@ -121,6 +136,42 @@ final class Metadata extends NativeHandle
         $status = $ffi->new('RustCallStatus');
 
         $result = $ffi->uniffi_ant_ffi_fn_method_metadata_size(
+            $this->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        return $result;
+    }
+
+    /**
+     * Get the created timestamp.
+     */
+    public function created(): int
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $result = $ffi->uniffi_ant_ffi_fn_method_metadata_created(
+            $this->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        return $result;
+    }
+
+    /**
+     * Get the modified timestamp.
+     */
+    public function modified(): int
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $result = $ffi->uniffi_ant_ffi_fn_method_metadata_modified(
             $this->cloneForCall(),
             FFI::addr($status)
         );
@@ -170,6 +221,9 @@ final class PublicArchive extends NativeHandle
     /**
      * Add a file to the archive.
      *
+     * Note: This returns a new archive with the file added (immutable pattern).
+     * The current object is updated to point to the new archive.
+     *
      * @param string $path The file path within the archive
      * @param DataAddress $dataAddress The address where the file data is stored
      * @param Metadata $metadata File metadata
@@ -180,7 +234,7 @@ final class PublicArchive extends NativeHandle
         $status = $ffi->new('RustCallStatus');
 
         $pathBuffer = RustBuffer::fromString($path);
-        $ffi->uniffi_ant_ffi_fn_method_publicarchive_add_file(
+        $newHandle = $ffi->uniffi_ant_ffi_fn_method_publicarchive_add_file(
             $this->cloneForCall(),
             $pathBuffer,
             $dataAddress->cloneForCall(),
@@ -189,6 +243,12 @@ final class PublicArchive extends NativeHandle
         );
 
         RustBuffer::checkStatus($status);
+
+        // The Rust method returns a new archive - update our handle
+        // First free the old handle, then update to the new one
+        $this->freeHandle();
+        $this->handle = $newHandle;
+        $this->disposed = false;
     }
 
     /**
@@ -208,7 +268,7 @@ final class PublicArchive extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;
@@ -254,6 +314,9 @@ final class PrivateArchive extends NativeHandle
     /**
      * Add a file to the archive.
      *
+     * Note: This returns a new archive with the file added (immutable pattern).
+     * The current object is updated to point to the new archive.
+     *
      * @param string $path The file path within the archive
      * @param DataMapChunk $dataMap The data map for the encrypted file
      * @param Metadata $metadata File metadata
@@ -264,7 +327,7 @@ final class PrivateArchive extends NativeHandle
         $status = $ffi->new('RustCallStatus');
 
         $pathBuffer = RustBuffer::fromString($path);
-        $ffi->uniffi_ant_ffi_fn_method_privatearchive_add_file(
+        $newHandle = $ffi->uniffi_ant_ffi_fn_method_privatearchive_add_file(
             $this->cloneForCall(),
             $pathBuffer,
             $dataMap->cloneForCall(),
@@ -273,6 +336,12 @@ final class PrivateArchive extends NativeHandle
         );
 
         RustBuffer::checkStatus($status);
+
+        // The Rust method returns a new archive - update our handle
+        // First free the old handle, then update to the new one
+        $this->freeHandle();
+        $this->handle = $newHandle;
+        $this->disposed = false;
     }
 
     /**
@@ -292,7 +361,7 @@ final class PrivateArchive extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;

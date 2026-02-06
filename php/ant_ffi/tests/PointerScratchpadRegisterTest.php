@@ -227,7 +227,21 @@ final class PointerScratchpadRegisterTest extends TestCase
 
         $scratchpad = Scratchpad::create($secretKey, 1, $data, 0);
 
-        $this->assertEquals($data, $scratchpad->data());
+        // Scratchpad stores encrypted data, so we need to decrypt to get original
+        $this->assertEquals($data, $scratchpad->decryptData($secretKey));
+    }
+
+    public function testScratchpadEncryptedData(): void
+    {
+        $secretKey = SecretKey::random();
+        $data = 'Test scratchpad data';
+
+        $scratchpad = Scratchpad::create($secretKey, 1, $data, 0);
+
+        // encryptedData() should return non-empty binary data
+        $encrypted = $scratchpad->encryptedData();
+        $this->assertNotEmpty($encrypted);
+        $this->assertNotEquals($data, $encrypted); // Should be encrypted
     }
 
     public function testScratchpadAddress(): void

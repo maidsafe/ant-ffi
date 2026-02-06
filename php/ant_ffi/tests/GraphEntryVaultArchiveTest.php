@@ -44,14 +44,21 @@ final class GraphEntryVaultArchiveTest extends TestCase
         $this->assertEquals($hex, $address2->toHex());
     }
 
-    public function testGraphEntryAddressOwner(): void
+    public function testGraphEntryAddressValid(): void
     {
         $secretKey = SecretKey::random();
         $publicKey = $secretKey->publicKey();
         $address = GraphEntryAddress::fromOwner($publicKey);
 
-        $owner = $address->owner();
-        $this->assertEquals($publicKey->toHex(), $owner->toHex());
+        // Address should have a valid hex
+        $this->assertNotEmpty($address->toHex());
+    }
+
+    // Helper: Create 32-byte content (GraphEntry requires exactly 32 bytes)
+    private function make32ByteContent(string $prefix): string
+    {
+        $content = str_pad($prefix, 32, "\0");
+        return substr($content, 0, 32);
     }
 
     // GraphEntry tests
@@ -60,7 +67,7 @@ final class GraphEntryVaultArchiveTest extends TestCase
     {
         $secretKey = SecretKey::random();
         $parents = '';  // Empty parents for first entry
-        $content = 'Hello, Graph!';
+        $content = $this->make32ByteContent('Hello, Graph!');
 
         $entry = GraphEntry::create($secretKey, $parents, $content);
 
@@ -70,7 +77,7 @@ final class GraphEntryVaultArchiveTest extends TestCase
     public function testGraphEntryAddress(): void
     {
         $secretKey = SecretKey::random();
-        $entry = GraphEntry::create($secretKey, '', 'test content');
+        $entry = GraphEntry::create($secretKey, '', $this->make32ByteContent('test content'));
 
         $address = $entry->address();
 
@@ -78,21 +85,30 @@ final class GraphEntryVaultArchiveTest extends TestCase
         $this->assertNotEmpty($address->toHex());
     }
 
-    public function testGraphEntryOwner(): void
+    public function testGraphEntryParents(): void
     {
         $secretKey = SecretKey::random();
-        $publicKey = $secretKey->publicKey();
-        $entry = GraphEntry::create($secretKey, '', 'test');
+        $entry = GraphEntry::create($secretKey, '', $this->make32ByteContent('test'));
 
-        $owner = $entry->owner();
+        // Empty parents should return empty or minimal serialized data
+        $parents = $entry->parents();
+        $this->assertIsString($parents);
+    }
 
-        $this->assertEquals($publicKey->toHex(), $owner->toHex());
+    public function testGraphEntryDescendants(): void
+    {
+        $secretKey = SecretKey::random();
+        $entry = GraphEntry::create($secretKey, '', $this->make32ByteContent('test'));
+
+        // Empty descendants should return empty or minimal serialized data
+        $descendants = $entry->descendants();
+        $this->assertIsString($descendants);
     }
 
     public function testGraphEntryContent(): void
     {
         $secretKey = SecretKey::random();
-        $content = 'Test graph entry content';
+        $content = $this->make32ByteContent('Test graph entry');
 
         $entry = GraphEntry::create($secretKey, '', $content);
 
@@ -175,24 +191,27 @@ final class GraphEntryVaultArchiveTest extends TestCase
 
     public function testMetadataCreate(): void
     {
-        $metadata = Metadata::create();
+        $metadata = Metadata::create(1024);
 
         $this->assertInstanceOf(Metadata::class, $metadata);
+        $this->assertEquals(1024, $metadata->size());
     }
 
     public function testMetadataWithSize(): void
     {
-        $metadata = Metadata::withSize(1024);
+        $metadata = Metadata::withSize(2048);
 
-        $this->assertEquals(1024, $metadata->size());
+        $this->assertEquals(2048, $metadata->size());
     }
 
-    public function testMetadataEmptySize(): void
+    public function testMetadataWithTimestamps(): void
     {
-        $metadata = Metadata::create();
+        $now = time();
+        $metadata = Metadata::withTimestamps(4096, $now - 100, $now);
 
-        // Empty metadata should have size 0
-        $this->assertEquals(0, $metadata->size());
+        $this->assertEquals(4096, $metadata->size());
+        $this->assertEquals($now - 100, $metadata->created());
+        $this->assertEquals($now, $metadata->modified());
     }
 
     // PublicArchive tests
@@ -288,7 +307,7 @@ final class GraphEntryVaultArchiveTest extends TestCase
     public function testGraphEntryDisposal(): void
     {
         $secretKey = SecretKey::random();
-        $entry = GraphEntry::create($secretKey, '', 'test');
+        $entry = GraphEntry::create($secretKey, '', $this->make32ByteContent('test'));
         $this->assertFalse($entry->isDisposed());
 
         $entry->dispose();
@@ -333,7 +352,7 @@ final class GraphEntryVaultArchiveTest extends TestCase
 
     public function testMetadataDisposal(): void
     {
-        $metadata = Metadata::create();
+        $metadata = Metadata::create(100);
         $this->assertFalse($metadata->isDisposed());
 
         $metadata->dispose();

@@ -16,7 +16,10 @@
     "autoload": {
         "psr-4": {
             "AntFfi\\": "src/"
-        }
+        },
+        "classmap": [
+            "src/Types/"
+        ]
     },
     "autoload-dev": {
         "psr-4": {

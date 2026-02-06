@@ -180,14 +180,14 @@ final class Scratchpad extends NativeHandle
     }
 
     /**
-     * Get the content type.
+     * Get the data encoding type.
      */
-    public function contentType(): int
+    public function dataEncoding(): int
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
-        $result = $ffi->uniffi_ant_ffi_fn_method_scratchpad_content_type(
+        $result = $ffi->uniffi_ant_ffi_fn_method_scratchpad_data_encoding(
             $this->cloneForCall(),
             FFI::addr($status)
         );
@@ -198,15 +198,23 @@ final class Scratchpad extends NativeHandle
     }
 
     /**
-     * Get the stored data.
+     * Alias for dataEncoding() for backwards compatibility.
      */
-    public function data(): string
+    public function contentType(): int
+    {
+        return $this->dataEncoding();
+    }
+
+    /**
+     * Get the encrypted data.
+     */
+    public function encryptedData(): string
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
         $resultBuffer = $ffi->new('RustBuffer');
 
-        $ffi->uniffi_ant_ffi_fn_method_scratchpad_data(
+        $ffi->uniffi_ant_ffi_fn_method_scratchpad_encrypted_data(
             FFI::addr($resultBuffer),
             $this->cloneForCall(),
             FFI::addr($status)
@@ -214,10 +222,59 @@ final class Scratchpad extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;
+    }
+
+    /**
+     * Alias for encryptedData() for backwards compatibility.
+     */
+    public function data(): string
+    {
+        return $this->encryptedData();
+    }
+
+    /**
+     * Decrypt the scratchpad data with the owner's secret key.
+     */
+    public function decryptData(SecretKey $sk): string
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_method_scratchpad_decrypt_data(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $sk->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        $result = RustBuffer::toString($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        return $result;
+    }
+
+    /**
+     * Verify the scratchpad signature is valid.
+     * Throws an exception if invalid.
+     */
+    public function verify(): void
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $ffi->uniffi_ant_ffi_fn_func_scratchpad_verify(
+            $this->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
     }
 
     /**
@@ -225,17 +282,12 @@ final class Scratchpad extends NativeHandle
      */
     public function isValid(): bool
     {
-        $ffi = FFILoader::get();
-        $status = $ffi->new('RustCallStatus');
-
-        $result = $ffi->uniffi_ant_ffi_fn_method_scratchpad_is_valid(
-            $this->cloneForCall(),
-            FFI::addr($status)
-        );
-
-        RustBuffer::checkStatus($status);
-
-        return $result !== 0;
+        try {
+            $this->verify();
+            return true;
+        } catch (\Exception $e) {
+            return false;
+        }
     }
 
     /**

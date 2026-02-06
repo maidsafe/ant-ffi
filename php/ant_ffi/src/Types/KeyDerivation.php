@@ -78,7 +78,7 @@ final class DerivationIndex extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;
@@ -147,7 +147,7 @@ final class Signature extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;
@@ -342,7 +342,7 @@ final class MainSecretKey extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;
@@ -470,7 +470,7 @@ final class MainPubkey extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;
@@ -686,7 +686,7 @@ final class DerivedPubkey extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;

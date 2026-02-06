@@ -340,30 +340,30 @@ final class Client extends NativeHandle
 
     /**
      * Parse an UploadResult from a RustBuffer.
-     * UploadResult has: price (String), address (String)
+     * FileUploadPublicResult has: cost (String), address (Arc<DataAddress> = pointer)
      * UniFFI serializes strings as: 4-byte BE length + UTF-8 data
+     * UniFFI serializes Arc pointers as: 8-byte pointer value
      */
     private static function parseUploadResult(CData $resultBuffer): DataPutResult
     {
+        $ffi = FFILoader::get();
         $data = RustBuffer::toBytes($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         $offset = 0;
 
-        // Parse price string
-        $priceLen = unpack('N', substr($data, $offset, 4))[1];
+        // Parse cost string
+        $costLen = unpack('N', substr($data, $offset, 4))[1];
         $offset += 4;
-        $price = substr($data, $offset, $priceLen);
-        $offset += $priceLen;
+        $cost = substr($data, $offset, $costLen);
+        $offset += $costLen;
 
-        // Parse address string (hex)
-        $addressLen = unpack('N', substr($data, $offset, 4))[1];
-        $offset += 4;
-        $addressHex = substr($data, $offset, $addressLen);
+        // Parse address pointer (8 bytes)
+        $ptrBytes = substr($data, $offset, 8);
+        $ptrValue = unpack('J', $ptrBytes)[1];
+        $addressHandle = $ffi->cast('void*', $ptrValue);
 
-        $address = DataAddress::fromHex($addressHex);
-
-        return new DataPutResult($address, $price);
+        return new DataPutResult(new DataAddress($addressHandle), $cost);
     }
 
     // =========================================================================
@@ -498,8 +498,10 @@ final class Client extends NativeHandle
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
 
         $ffi->uniffi_ant_ffi_fn_func_client_scratchpad_put_blocking(
+            FFI::addr($resultBuffer),
             $this->cloneForCall(),
             $scratchpad->cloneForCall(),
             $wallet->cloneForCall(),
@@ -507,6 +509,7 @@ final class Client extends NativeHandle
         );
 
         RustBuffer::checkStatus($status);
+        RustBuffer::free($resultBuffer);
     }
 
     // =========================================================================
@@ -542,14 +545,17 @@ final class Client extends NativeHandle
 
     /**
      * Create a new register on the network.
+     * Note: Register value must be exactly 32 bytes.
      */
     public function registerCreateSync(SecretKey $owner, string $value, Wallet $wallet): RegisterAddress
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
 
         $valueBuffer = RustBuffer::fromStringWithPrefix($value);
-        $handle = $ffi->uniffi_ant_ffi_fn_func_client_register_create_blocking(
+        $ffi->uniffi_ant_ffi_fn_func_client_register_create_blocking(
+            FFI::addr($resultBuffer),
             $this->cloneForCall(),
             $owner->cloneForCall(),
             $valueBuffer,
@@ -559,7 +565,24 @@ final class Client extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        return new RegisterAddress($handle);
+        // Parse RegisterCreateResult: cost (String) + address (Arc<RegisterAddress>)
+        $data = RustBuffer::toBytes($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        $offset = 0;
+
+        // Parse cost string (4-byte BE length + UTF-8 data)
+        $costLen = unpack('N', substr($data, $offset, 4))[1];
+        $offset += 4;
+        // Skip cost value - we don't need it for the return type
+        $offset += $costLen;
+
+        // Parse address pointer (8 bytes)
+        $ptrBytes = substr($data, $offset, 8);
+        $ptrValue = unpack('J', $ptrBytes)[1];
+        $addressHandle = $ffi->cast('void*', $ptrValue);
+
+        return new RegisterAddress($addressHandle);
     }
 
     /**
@@ -612,8 +635,10 @@ final class Client extends NativeHandle
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
 
         $ffi->uniffi_ant_ffi_fn_func_client_graph_entry_put_blocking(
+            FFI::addr($resultBuffer),
             $this->cloneForCall(),
             $entry->cloneForCall(),
             $wallet->cloneForCall(),
@@ -621,6 +646,7 @@ final class Client extends NativeHandle
         );
 
         RustBuffer::checkStatus($status);
+        RustBuffer::free($resultBuffer);
     }
 
     // =========================================================================
@@ -653,8 +679,10 @@ final class Client extends NativeHandle
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
 
         $ffi->uniffi_ant_ffi_fn_func_client_vault_put_user_data_blocking(
+            FFI::addr($resultBuffer),
             $this->cloneForCall(),
             $secretKey->cloneForCall(),
             $wallet->cloneForCall(),
@@ -663,6 +691,7 @@ final class Client extends NativeHandle
         );
 
         RustBuffer::checkStatus($status);
+        RustBuffer::free($resultBuffer);
     }
 
     // =========================================================================
@@ -695,8 +724,10 @@ final class Client extends NativeHandle
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
 
-        $handle = $ffi->uniffi_ant_ffi_fn_func_client_archive_put_public_blocking(
+        $ffi->uniffi_ant_ffi_fn_func_client_archive_put_public_blocking(
+            FFI::addr($resultBuffer),
             $this->cloneForCall(),
             $archive->cloneForCall(),
             $wallet->cloneForCall(),
@@ -705,7 +736,24 @@ final class Client extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        return new ArchiveAddress($handle);
+        // Parse PublicArchivePutResult: cost (String) + address (Arc<ArchiveAddress>)
+        $data = RustBuffer::toBytes($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        $offset = 0;
+
+        // Parse cost string (4-byte BE length + UTF-8 data)
+        $costLen = unpack('N', substr($data, $offset, 4))[1];
+        $offset += 4;
+        // Skip cost value - we don't need it for the return type
+        $offset += $costLen;
+
+        // Parse address pointer (8 bytes)
+        $ptrBytes = substr($data, $offset, 8);
+        $ptrValue = unpack('J', $ptrBytes)[1];
+        $addressHandle = $ffi->cast('void*', $ptrValue);
+
+        return new ArchiveAddress($addressHandle);
     }
 
     // =========================================================================

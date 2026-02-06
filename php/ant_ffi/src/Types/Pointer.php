@@ -121,7 +121,7 @@ final class PointerTarget extends NativeHandle
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
-        $handle = $ffi->uniffi_ant_ffi_fn_constructor_pointertarget_from_chunk_address(
+        $handle = $ffi->uniffi_ant_ffi_fn_constructor_pointertarget_chunk(
             $address->cloneForCall(),
             FFI::addr($status)
         );
@@ -139,7 +139,7 @@ final class PointerTarget extends NativeHandle
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
-        $handle = $ffi->uniffi_ant_ffi_fn_constructor_pointertarget_from_graph_entry_address(
+        $handle = $ffi->uniffi_ant_ffi_fn_constructor_pointertarget_graph_entry(
             $address->cloneForCall(),
             FFI::addr($status)
         );
@@ -157,7 +157,7 @@ final class PointerTarget extends NativeHandle
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
-        $handle = $ffi->uniffi_ant_ffi_fn_constructor_pointertarget_from_pointer_address(
+        $handle = $ffi->uniffi_ant_ffi_fn_constructor_pointertarget_pointer(
             $address->cloneForCall(),
             FFI::addr($status)
         );
@@ -175,7 +175,7 @@ final class PointerTarget extends NativeHandle
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
-        $handle = $ffi->uniffi_ant_ffi_fn_constructor_pointertarget_from_scratchpad_address(
+        $handle = $ffi->uniffi_ant_ffi_fn_constructor_pointertarget_scratchpad(
             $address->cloneForCall(),
             FFI::addr($status)
         );
@@ -183,6 +183,29 @@ final class PointerTarget extends NativeHandle
         RustBuffer::checkStatus($status);
 
         return new self($handle);
+    }
+
+    /**
+     * Convert to hex string.
+     */
+    public function toHex(): string
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_method_pointertarget_to_hex(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        $result = RustBuffer::toString($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        return $result;
     }
 
     protected function freeHandle(): void
@@ -266,21 +289,11 @@ final class NetworkPointer extends NativeHandle
     }
 
     /**
-     * Get the owner's public key.
+     * Get the owner's public key (via the address).
      */
     public function owner(): PublicKey
     {
-        $ffi = FFILoader::get();
-        $status = $ffi->new('RustCallStatus');
-
-        $handle = $ffi->uniffi_ant_ffi_fn_method_networkpointer_owner(
-            $this->cloneForCall(),
-            FFI::addr($status)
-        );
-
-        RustBuffer::checkStatus($status);
-
-        return new PublicKey($handle);
+        return $this->address()->owner();
     }
 
     /**

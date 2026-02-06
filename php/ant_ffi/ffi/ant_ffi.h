@@ -138,24 +138,24 @@ void uniffi_ant_ffi_fn_func_client_pointer_put_blocking(void *client, void *poin
 
 // Scratchpad Blocking
 void *uniffi_ant_ffi_fn_func_client_scratchpad_get_blocking(void *client, void *address, RustCallStatus *out_status);
-void uniffi_ant_ffi_fn_func_client_scratchpad_put_blocking(void *client, void *scratchpad, void *wallet, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_func_client_scratchpad_put_blocking(RustBuffer *out_result, void *client, void *scratchpad, void *wallet, RustCallStatus *out_status);
 
 // Register Blocking
 void uniffi_ant_ffi_fn_func_client_register_get_blocking(RustBuffer *out_result, void *client, void *address, RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_func_client_register_create_blocking(void *client, void *owner, RustBuffer value, void *wallet, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_func_client_register_create_blocking(RustBuffer *out_result, void *client, void *owner, RustBuffer value, void *wallet, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_func_client_register_update_blocking(void *client, void *owner, RustBuffer value, void *wallet, RustCallStatus *out_status);
 
 // Graph Entry Blocking
 void *uniffi_ant_ffi_fn_func_client_graph_entry_get_blocking(void *client, void *address, RustCallStatus *out_status);
-void uniffi_ant_ffi_fn_func_client_graph_entry_put_blocking(void *client, void *entry, void *wallet, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_func_client_graph_entry_put_blocking(RustBuffer *out_result, void *client, void *entry, void *wallet, RustCallStatus *out_status);
 
 // Vault Blocking
 void *uniffi_ant_ffi_fn_func_client_vault_get_user_data_blocking(void *client, void *secret_key, RustCallStatus *out_status);
-void uniffi_ant_ffi_fn_func_client_vault_put_user_data_blocking(void *client, void *secret_key, void *wallet, void *user_data, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_func_client_vault_put_user_data_blocking(RustBuffer *out_result, void *client, void *secret_key, void *wallet, void *user_data, RustCallStatus *out_status);
 
 // Archive Blocking
 void *uniffi_ant_ffi_fn_func_client_archive_get_public_blocking(void *client, void *address, RustCallStatus *out_status);
-void uniffi_ant_ffi_fn_func_client_archive_put_public_blocking(void *client, void *archive, void *wallet, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_func_client_archive_put_public_blocking(RustBuffer *out_result, void *client, void *archive, void *wallet, RustCallStatus *out_status);
 
 // File Blocking
 void uniffi_ant_ffi_fn_func_client_file_upload_blocking(RustBuffer *out_result, void *client, RustBuffer path, void *wallet, RustCallStatus *out_status);
@@ -230,18 +230,18 @@ void uniffi_ant_ffi_fn_free_pointeraddress(void *ptr, RustCallStatus *out_status
 void *uniffi_ant_ffi_fn_clone_pointeraddress(void *ptr, RustCallStatus *out_status);
 
 // PointerTarget
-void *uniffi_ant_ffi_fn_constructor_pointertarget_from_chunk_address(void *address, RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_constructor_pointertarget_from_graph_entry_address(void *address, RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_constructor_pointertarget_from_pointer_address(void *address, RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_constructor_pointertarget_from_scratchpad_address(void *address, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_pointertarget_chunk(void *addr, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_pointertarget_graph_entry(void *addr, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_pointertarget_pointer(void *addr, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_pointertarget_scratchpad(void *addr, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_method_pointertarget_to_hex(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_pointertarget(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_pointertarget(void *ptr, RustCallStatus *out_status);
 
 // NetworkPointer
-void *uniffi_ant_ffi_fn_constructor_networkpointer_new(void *owner, int64_t counter, void *target, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_networkpointer_new(void *owner, uint64_t counter, void *target, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_method_networkpointer_address(void *ptr, RustCallStatus *out_status);
-int64_t uniffi_ant_ffi_fn_method_networkpointer_counter(void *ptr, RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_method_networkpointer_owner(void *ptr, RustCallStatus *out_status);
+uint64_t uniffi_ant_ffi_fn_method_networkpointer_counter(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_method_networkpointer_target(void *ptr, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_networkpointer(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_networkpointer(void *ptr, RustCallStatus *out_status);
@@ -255,13 +255,16 @@ void uniffi_ant_ffi_fn_free_scratchpadaddress(void *ptr, RustCallStatus *out_sta
 void *uniffi_ant_ffi_fn_clone_scratchpadaddress(void *ptr, RustCallStatus *out_status);
 
 // Scratchpad
-void *uniffi_ant_ffi_fn_constructor_scratchpad_new(void *owner, int64_t content_type, RustBuffer data, int64_t counter, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_scratchpad_new(void *owner, uint64_t data_encoding, RustBuffer unencrypted_data, uint64_t counter, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_method_scratchpad_address(void *ptr, RustCallStatus *out_status);
-int64_t uniffi_ant_ffi_fn_method_scratchpad_counter(void *ptr, RustCallStatus *out_status);
-int64_t uniffi_ant_ffi_fn_method_scratchpad_content_type(void *ptr, RustCallStatus *out_status);
-void uniffi_ant_ffi_fn_method_scratchpad_data(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
-int8_t uniffi_ant_ffi_fn_method_scratchpad_is_valid(void *ptr, RustCallStatus *out_status);
+uint64_t uniffi_ant_ffi_fn_method_scratchpad_counter(void *ptr, RustCallStatus *out_status);
+uint64_t uniffi_ant_ffi_fn_method_scratchpad_data_encoding(void *ptr, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_method_scratchpad_encrypted_data(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_method_scratchpad_decrypt_data(RustBuffer *out_result, void *ptr, void *sk, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_method_scratchpad_encrypted_data_hash(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_method_scratchpad_owner(void *ptr, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_method_scratchpad_scratchpad_hash(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_func_scratchpad_verify(void *scratchpad, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_scratchpad(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_scratchpad(void *ptr, RustCallStatus *out_status);
 
@@ -274,18 +277,18 @@ void uniffi_ant_ffi_fn_free_registeraddress(void *ptr, RustCallStatus *out_statu
 void *uniffi_ant_ffi_fn_clone_registeraddress(void *ptr, RustCallStatus *out_status);
 
 // GraphEntryAddress
-void *uniffi_ant_ffi_fn_constructor_graphentryaddress_new(void *owner, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_graphentryaddress_new(void *public_key, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_constructor_graphentryaddress_from_hex(RustBuffer hex, RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_method_graphentryaddress_owner(void *ptr, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_method_graphentryaddress_to_hex(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_graphentryaddress(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_graphentryaddress(void *ptr, RustCallStatus *out_status);
 
 // GraphEntry
-void *uniffi_ant_ffi_fn_constructor_graphentry_new(void *owner, RustBuffer parents, RustBuffer content, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_graphentry_new(void *owner, RustBuffer parents, RustBuffer content, RustBuffer descendants, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_method_graphentry_address(void *ptr, RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_method_graphentry_owner(void *ptr, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_method_graphentry_content(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_method_graphentry_parents(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
+void uniffi_ant_ffi_fn_method_graphentry_descendants(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_graphentry(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_graphentry(void *ptr, RustCallStatus *out_status);
 
@@ -311,14 +314,14 @@ void *uniffi_ant_ffi_fn_clone_archiveaddress(void *ptr, RustCallStatus *out_stat
 
 // PublicArchive
 void *uniffi_ant_ffi_fn_constructor_publicarchive_new(RustCallStatus *out_status);
-void uniffi_ant_ffi_fn_method_publicarchive_add_file(void *ptr, RustBuffer path, void *data_address, void *metadata, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_method_publicarchive_add_file(void *ptr, RustBuffer path, void *data_address, void *metadata, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_method_publicarchive_files(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_publicarchive(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_publicarchive(void *ptr, RustCallStatus *out_status);
 
 // PrivateArchive
 void *uniffi_ant_ffi_fn_constructor_privatearchive_new(RustCallStatus *out_status);
-void uniffi_ant_ffi_fn_method_privatearchive_add_file(void *ptr, RustBuffer path, void *data_map, void *metadata, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_method_privatearchive_add_file(void *ptr, RustBuffer path, void *data_map, void *metadata, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_method_privatearchive_files(RustBuffer *out_result, void *ptr, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_privatearchive(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_privatearchive(void *ptr, RustCallStatus *out_status);
@@ -330,8 +333,10 @@ void uniffi_ant_ffi_fn_free_privatearchivedatamap(void *ptr, RustCallStatus *out
 void *uniffi_ant_ffi_fn_clone_privatearchivedatamap(void *ptr, RustCallStatus *out_status);
 
 // Metadata
-void *uniffi_ant_ffi_fn_constructor_metadata_new(RustCallStatus *out_status);
-void *uniffi_ant_ffi_fn_constructor_metadata_with_size(uint64_t size, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_metadata_new(uint64_t size, RustCallStatus *out_status);
+void *uniffi_ant_ffi_fn_constructor_metadata_with_timestamps(uint64_t size, uint64_t created, uint64_t modified, RustCallStatus *out_status);
 uint64_t uniffi_ant_ffi_fn_method_metadata_size(void *ptr, RustCallStatus *out_status);
+uint64_t uniffi_ant_ffi_fn_method_metadata_created(void *ptr, RustCallStatus *out_status);
+uint64_t uniffi_ant_ffi_fn_method_metadata_modified(void *ptr, RustCallStatus *out_status);
 void uniffi_ant_ffi_fn_free_metadata(void *ptr, RustCallStatus *out_status);
 void *uniffi_ant_ffi_fn_clone_metadata(void *ptr, RustCallStatus *out_status);

@@ -53,24 +53,6 @@ final class GraphEntryAddress extends NativeHandle
     }
 
     /**
-     * Get the owner public key.
-     */
-    public function owner(): PublicKey
-    {
-        $ffi = FFILoader::get();
-        $status = $ffi->new('RustCallStatus');
-
-        $handle = $ffi->uniffi_ant_ffi_fn_method_graphentryaddress_owner(
-            $this->cloneForCall(),
-            FFI::addr($status)
-        );
-
-        RustBuffer::checkStatus($status);
-
-        return new PublicKey($handle);
-    }
-
-    /**
      * Convert to hex string.
      */
     public function toHex(): string
@@ -121,19 +103,22 @@ final class GraphEntry extends NativeHandle
      *
      * @param SecretKey $owner The owner's secret key
      * @param string $parents Serialized parent addresses
-     * @param string $content The content to store
+     * @param string $content The content to store (must be exactly 32 bytes)
+     * @param string $descendants Serialized descendant addresses
      */
-    public static function create(SecretKey $owner, string $parents, string $content): self
+    public static function create(SecretKey $owner, string $parents, string $content, string $descendants = ''): self
     {
         $ffi = FFILoader::get();
         $status = $ffi->new('RustCallStatus');
 
         $parentsBuffer = RustBuffer::fromStringWithPrefix($parents);
         $contentBuffer = RustBuffer::fromStringWithPrefix($content);
+        $descendantsBuffer = RustBuffer::fromStringWithPrefix($descendants);
         $handle = $ffi->uniffi_ant_ffi_fn_constructor_graphentry_new(
             $owner->cloneForCall(),
             $parentsBuffer,
             $contentBuffer,
+            $descendantsBuffer,
             FFI::addr($status)
         );
 
@@ -161,24 +146,6 @@ final class GraphEntry extends NativeHandle
     }
 
     /**
-     * Get the owner's public key.
-     */
-    public function owner(): PublicKey
-    {
-        $ffi = FFILoader::get();
-        $status = $ffi->new('RustCallStatus');
-
-        $handle = $ffi->uniffi_ant_ffi_fn_method_graphentry_owner(
-            $this->cloneForCall(),
-            FFI::addr($status)
-        );
-
-        RustBuffer::checkStatus($status);
-
-        return new PublicKey($handle);
-    }
-
-    /**
      * Get the content.
      */
     public function content(): string
@@ -195,7 +162,53 @@ final class GraphEntry extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        return $result;
+    }
+
+    /**
+     * Get the parents (serialized).
+     */
+    public function parents(): string
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_method_graphentry_parents(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        $result = RustBuffer::toString($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        return $result;
+    }
+
+    /**
+     * Get the descendants (serialized).
+     */
+    public function descendants(): string
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_method_graphentry_descendants(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;

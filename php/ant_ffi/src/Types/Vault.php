@@ -128,7 +128,7 @@ final class UserData extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;
@@ -151,7 +151,7 @@ final class UserData extends NativeHandle
 
         RustBuffer::checkStatus($status);
 
-        $result = RustBuffer::toStringWithPrefix($resultBuffer);
+        $result = RustBuffer::toString($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         return $result;
