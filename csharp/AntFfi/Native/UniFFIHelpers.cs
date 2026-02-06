@@ -405,4 +405,34 @@ public static class UniFFIHelpers
             }
         }
     }
+
+    /// <summary>
+    /// Creates a RustBuffer from an optional string in UniFFI Option format.
+    /// None: 1 byte (0), Some: 1 byte (1) + 4-byte BE length + UTF-8 bytes.
+    /// </summary>
+    /// <param name="str">The optional string to convert.</param>
+    /// <returns>A RustBuffer containing the serialized Option&lt;String&gt;.</returns>
+    public static RustBuffer OptionStringToRustBuffer(string? str)
+    {
+        byte[] rawBytes;
+        if (str == null)
+        {
+            // None variant: just a 0 byte
+            rawBytes = new byte[] { 0 };
+        }
+        else
+        {
+            // Some variant: 1 byte + 4-byte BE length + UTF-8 data
+            var utf8Bytes = System.Text.Encoding.UTF8.GetBytes(str);
+            rawBytes = new byte[1 + 4 + utf8Bytes.Length];
+            rawBytes[0] = 1; // Some
+            rawBytes[1] = (byte)(utf8Bytes.Length >> 24);
+            rawBytes[2] = (byte)(utf8Bytes.Length >> 16);
+            rawBytes[3] = (byte)(utf8Bytes.Length >> 8);
+            rawBytes[4] = (byte)utf8Bytes.Length;
+            Buffer.BlockCopy(utf8Bytes, 0, rawBytes, 5, utf8Bytes.Length);
+        }
+
+        return RawToRustBuffer(rawBytes);
+    }
 }

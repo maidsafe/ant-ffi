@@ -735,7 +735,7 @@ internal static partial class NativeMethods
     public static extern IntPtr NetworkNew(sbyte isLocal, ref RustCallStatus status);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uniffi_ant_ffi_fn_constructor_network_custom")]
-    public static extern IntPtr NetworkCustom(RustBuffer rpcUrl, RustBuffer paymentTokenAddress, RustBuffer dataPaymentsAddress, ref RustCallStatus status);
+    public static extern IntPtr NetworkCustom(RustBuffer rpcUrl, RustBuffer paymentTokenAddress, RustBuffer dataPaymentsAddress, RustBuffer royaltiesPkHex, ref RustCallStatus status);
 
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uniffi_ant_ffi_fn_free_network")]
     public static extern void FreeNetwork(IntPtr ptr, ref RustCallStatus status);
@@ -842,7 +842,7 @@ internal static partial class NativeMethods
     /// Async: Estimates the cost to upload a file to the network.
     /// </summary>
     [DllImport(LibName, CallingConvention = CallingConvention.Cdecl, EntryPoint = "uniffi_ant_ffi_fn_method_client_file_cost")]
-    public static extern ulong ClientFileCost(IntPtr ptr, RustBuffer filePath);
+    public static extern ulong ClientFileCost(IntPtr ptr, RustBuffer filePath, sbyte followSymlinks, sbyte includeHidden);
 
     #endregion
 

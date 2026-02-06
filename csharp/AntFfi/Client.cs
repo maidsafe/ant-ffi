@@ -282,9 +282,11 @@ public sealed class Client : NativeHandle
     /// Estimates the cost to upload a file to the network.
     /// </summary>
     /// <param name="filePath">The path to the file.</param>
+    /// <param name="followSymlinks">Whether to follow symbolic links (default: true).</param>
+    /// <param name="includeHidden">Whether to include hidden files (default: false).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The estimated cost as a string (in tokens).</returns>
-    public async Task<string> FileCostAsync(string filePath, CancellationToken cancellationToken = default)
+    public async Task<string> FileCostAsync(string filePath, bool followSymlinks = true, bool includeHidden = false, CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(filePath);
@@ -293,7 +295,7 @@ public sealed class Client : NativeHandle
             throw new FileNotFoundException("File not found", filePath);
 
         var pathBuffer = UniFFIHelpers.StringToRustBuffer(filePath);
-        var futureHandle = NativeMethods.ClientFileCost(CloneHandle(), pathBuffer);
+        var futureHandle = NativeMethods.ClientFileCost(CloneHandle(), pathBuffer, followSymlinks ? (sbyte)1 : (sbyte)0, includeHidden ? (sbyte)1 : (sbyte)0);
         var buffer = await AsyncFutureHelper.PollRustBufferAsync(futureHandle, cancellationToken);
         return UniFFIHelpers.StringFromRustBuffer(buffer);
     }
