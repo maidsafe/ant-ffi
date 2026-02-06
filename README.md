@@ -604,6 +604,33 @@ For full documentation including async operations, memory management, and build 
 - **Scratchpads**: Encrypted mutable data with versioning
 - **GraphEntry**: Graph-based data structures
 
+## Platform Limitations
+
+Some features have platform-specific limitations due to language or runtime constraints. Below are the known limitations and recommended workarounds.
+
+### PHP
+
+| Limitation | Explanation | Workaround |
+|------------|-------------|------------|
+| No async callbacks | PHP FFI cannot receive callbacks from Rust async functions. The FFI extension lacks the ability to create function pointers that Rust can call back into. | Use blocking wrapper functions (`*Sync` methods like `dataPutPublicSync()`) that internally use a shared Tokio runtime to execute async operations synchronously. |
+| No real-time streaming | PHP is request-based and not suited for long-lived connections. Each HTTP request runs to completion, making continuous data streams impractical. | Use `dataGetPublic()` to fetch complete data in a single request. For large files, implement chunked downloads at the application level by storing chunk addresses and fetching them sequentially. |
+| No event subscriptions | Cannot subscribe to network events due to the callback limitation and request-based execution model. | Poll for updates periodically if real-time awareness is needed. Consider using a message queue or webhook system for event-driven architectures. |
+
+### Lua (LuaJIT)
+
+| Limitation | Explanation | Workaround |
+|------------|-------------|------------|
+| No async callbacks | LuaJIT has thread-safety limitations with callbacks. Rust async operations require callbacks that would execute on different threads, which LuaJIT's FFI cannot safely handle. | Use the `async_helper` Rust library which provides blocking poll functions (`poll_pointer_sync`, `poll_rust_buffer_sync`, `poll_void_sync`) that bridge async Rust to synchronous Lua calls. |
+| Limited streaming | Memory constraints when handling large data. LuaJIT allocates all data in its managed heap, which can be problematic for multi-megabyte transfers. | Use file-based operations for large data. Stream directly to disk rather than loading into memory. Process data in chunks when possible. |
+
+### Dart/Flutter (Mobile)
+
+| Limitation | Explanation | Workaround |
+|------------|-------------|------------|
+| Mobile directory restrictions | iOS and Android enforce sandbox file system access. Apps cannot freely access arbitrary filesystem paths. | Use platform-specific document directories via the `path_provider` package (`getApplicationDocumentsDirectory()`, `getTemporaryDirectory()`). On Android, request `MANAGE_EXTERNAL_STORAGE` permission for broader access if absolutely required. |
+| Memory constraints | Mobile devices have limited RAM compared to desktop systems. Loading large files entirely into memory can cause crashes or termination by the OS. | Use streaming APIs for large files. Implement pagination for archives. Process data in chunks and write to disk incrementally rather than holding everything in memory. |
+| Background execution limits | Mobile operating systems aggressively kill background processes to conserve battery and resources. Long-running uploads/downloads may be interrupted. | Use platform-specific background task APIs (`WorkManager` on Android, `BGTaskScheduler` on iOS). Implement resume capability by saving progress state. Break large operations into smaller resumable units. |
+
 ## License
 
 BSD 3-Clause License. See [LICENSE](LICENSE) for details.

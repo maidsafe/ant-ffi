@@ -18,6 +18,11 @@ class Chunk {
 
   Chunk._(this._handle);
 
+  /// Creates a Chunk from a raw FFI handle.
+  factory Chunk.fromHandle(Pointer<Void> handle) {
+    return Chunk._(handle);
+  }
+
   /// Clones the internal handle for passing to FFI.
   /// Required because UniFFI consumes one Arc reference per call.
   Pointer<Void> _clone() {

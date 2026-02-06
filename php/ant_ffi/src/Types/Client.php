@@ -14,7 +14,7 @@ use FFI;
 use FFI\CData;
 
 /**
- * Result of a data put operation.
+ * Result of a public data put operation.
  */
 final class DataPutResult
 {
@@ -24,6 +24,21 @@ final class DataPutResult
     public function __construct(DataAddress $address, string $cost)
     {
         $this->address = $address;
+        $this->cost = $cost;
+    }
+}
+
+/**
+ * Result of a private data put operation.
+ */
+final class PrivateDataPutResult
+{
+    public DataMapChunk $dataMap;
+    public string $cost;
+
+    public function __construct(DataMapChunk $dataMap, string $cost)
+    {
+        $this->dataMap = $dataMap;
         $this->cost = $cost;
     }
 }
@@ -325,30 +340,541 @@ final class Client extends NativeHandle
 
     /**
      * Parse an UploadResult from a RustBuffer.
-     * UploadResult has: price (String), address (String)
+     * FileUploadPublicResult has: cost (String), address (Arc<DataAddress> = pointer)
      * UniFFI serializes strings as: 4-byte BE length + UTF-8 data
+     * UniFFI serializes Arc pointers as: 8-byte pointer value
      */
     private static function parseUploadResult(CData $resultBuffer): DataPutResult
     {
+        $ffi = FFILoader::get();
         $data = RustBuffer::toBytes($resultBuffer);
         RustBuffer::free($resultBuffer);
 
         $offset = 0;
 
-        // Parse price string
-        $priceLen = unpack('N', substr($data, $offset, 4))[1];
+        // Parse cost string
+        $costLen = unpack('N', substr($data, $offset, 4))[1];
         $offset += 4;
-        $price = substr($data, $offset, $priceLen);
-        $offset += $priceLen;
+        $cost = substr($data, $offset, $costLen);
+        $offset += $costLen;
 
-        // Parse address string (hex)
-        $addressLen = unpack('N', substr($data, $offset, 4))[1];
+        // Parse address pointer (8 bytes)
+        $ptrBytes = substr($data, $offset, 8);
+        $ptrValue = unpack('J', $ptrBytes)[1];
+        $addressHandle = $ffi->cast('void*', $ptrValue);
+
+        return new DataPutResult(new DataAddress($addressHandle), $cost);
+    }
+
+    // =========================================================================
+    // Private Data Operations
+    // =========================================================================
+
+    /**
+     * Upload private (encrypted) data synchronously.
+     *
+     * @param string $data The data to upload
+     * @param Wallet $wallet The wallet for payment
+     * @return PrivateDataPutResult The result with data map and cost
+     */
+    public function dataPutSync(string $data, Wallet $wallet): PrivateDataPutResult
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $dataBuffer = RustBuffer::fromStringWithPrefix($data);
+
+        $ffi->uniffi_ant_ffi_fn_func_client_data_put_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $dataBuffer,
+            $wallet->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+        return self::parsePrivateUploadResult($resultBuffer);
+    }
+
+    /**
+     * Download private (encrypted) data synchronously.
+     *
+     * @param DataMapChunk $dataMap The data map from dataPutSync
+     * @return string The decrypted data
+     */
+    public function dataGetSync(DataMapChunk $dataMap): string
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_func_client_data_get_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $dataMap->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        $rawData = RustBuffer::toBytes($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        if (strlen($rawData) >= 4) {
+            return substr($rawData, 4);
+        }
+        return $rawData;
+    }
+
+    // =========================================================================
+    // Pointer Operations
+    // =========================================================================
+
+    /**
+     * Get a network pointer by address.
+     */
+    public function pointerGetSync(PointerAddress $address): NetworkPointer
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $handle = $ffi->uniffi_ant_ffi_fn_func_client_pointer_get_blocking(
+            $this->cloneForCall(),
+            $address->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        return new NetworkPointer($handle);
+    }
+
+    /**
+     * Store a network pointer.
+     */
+    public function pointerPutSync(NetworkPointer $pointer, Wallet $wallet): void
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $ffi->uniffi_ant_ffi_fn_func_client_pointer_put_blocking(
+            $this->cloneForCall(),
+            $pointer->cloneForCall(),
+            $wallet->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+    }
+
+    // =========================================================================
+    // Scratchpad Operations
+    // =========================================================================
+
+    /**
+     * Get a scratchpad by address.
+     */
+    public function scratchpadGetSync(ScratchpadAddress $address): Scratchpad
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $handle = $ffi->uniffi_ant_ffi_fn_func_client_scratchpad_get_blocking(
+            $this->cloneForCall(),
+            $address->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        return new Scratchpad($handle);
+    }
+
+    /**
+     * Store a scratchpad on the network.
+     */
+    public function scratchpadPutSync(Scratchpad $scratchpad, Wallet $wallet): void
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_func_client_scratchpad_put_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $scratchpad->cloneForCall(),
+            $wallet->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+        RustBuffer::free($resultBuffer);
+    }
+
+    // =========================================================================
+    // Register Operations
+    // =========================================================================
+
+    /**
+     * Get a register value by address.
+     */
+    public function registerGetSync(RegisterAddress $address): string
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_func_client_register_get_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $address->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        $rawData = RustBuffer::toBytes($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        if (strlen($rawData) >= 4) {
+            return substr($rawData, 4);
+        }
+        return $rawData;
+    }
+
+    /**
+     * Create a new register on the network.
+     * Note: Register value must be exactly 32 bytes.
+     */
+    public function registerCreateSync(SecretKey $owner, string $value, Wallet $wallet): RegisterAddress
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $valueBuffer = RustBuffer::fromStringWithPrefix($value);
+        $ffi->uniffi_ant_ffi_fn_func_client_register_create_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $owner->cloneForCall(),
+            $valueBuffer,
+            $wallet->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        // Parse RegisterCreateResult: cost (String) + address (Arc<RegisterAddress>)
+        $data = RustBuffer::toBytes($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        $offset = 0;
+
+        // Parse cost string (4-byte BE length + UTF-8 data)
+        $costLen = unpack('N', substr($data, $offset, 4))[1];
         $offset += 4;
-        $addressHex = substr($data, $offset, $addressLen);
+        // Skip cost value - we don't need it for the return type
+        $offset += $costLen;
 
-        $address = DataAddress::fromHex($addressHex);
+        // Parse address pointer (8 bytes)
+        $ptrBytes = substr($data, $offset, 8);
+        $ptrValue = unpack('J', $ptrBytes)[1];
+        $addressHandle = $ffi->cast('void*', $ptrValue);
 
-        return new DataPutResult($address, $price);
+        return new RegisterAddress($addressHandle);
+    }
+
+    /**
+     * Update an existing register.
+     */
+    public function registerUpdateSync(SecretKey $owner, string $value, Wallet $wallet): void
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $valueBuffer = RustBuffer::fromStringWithPrefix($value);
+        $ffi->uniffi_ant_ffi_fn_func_client_register_update_blocking(
+            $this->cloneForCall(),
+            $owner->cloneForCall(),
+            $valueBuffer,
+            $wallet->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+    }
+
+    // =========================================================================
+    // Graph Entry Operations
+    // =========================================================================
+
+    /**
+     * Get a graph entry by address.
+     */
+    public function graphEntryGetSync(GraphEntryAddress $address): GraphEntry
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $handle = $ffi->uniffi_ant_ffi_fn_func_client_graph_entry_get_blocking(
+            $this->cloneForCall(),
+            $address->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        return new GraphEntry($handle);
+    }
+
+    /**
+     * Store a graph entry on the network.
+     */
+    public function graphEntryPutSync(GraphEntry $entry, Wallet $wallet): void
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_func_client_graph_entry_put_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $entry->cloneForCall(),
+            $wallet->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+        RustBuffer::free($resultBuffer);
+    }
+
+    // =========================================================================
+    // Vault Operations
+    // =========================================================================
+
+    /**
+     * Get user data from a vault.
+     */
+    public function vaultGetUserDataSync(VaultSecretKey $secretKey): UserData
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $handle = $ffi->uniffi_ant_ffi_fn_func_client_vault_get_user_data_blocking(
+            $this->cloneForCall(),
+            $secretKey->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        return new UserData($handle);
+    }
+
+    /**
+     * Store user data to a vault.
+     */
+    public function vaultPutUserDataSync(VaultSecretKey $secretKey, UserData $userData, Wallet $wallet): void
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_func_client_vault_put_user_data_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $secretKey->cloneForCall(),
+            $wallet->cloneForCall(),
+            $userData->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+        RustBuffer::free($resultBuffer);
+    }
+
+    // =========================================================================
+    // Archive Operations
+    // =========================================================================
+
+    /**
+     * Get a public archive by address.
+     */
+    public function archiveGetPublicSync(ArchiveAddress $address): PublicArchive
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $handle = $ffi->uniffi_ant_ffi_fn_func_client_archive_get_public_blocking(
+            $this->cloneForCall(),
+            $address->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        return new PublicArchive($handle);
+    }
+
+    /**
+     * Store a public archive on the network.
+     */
+    public function archivePutPublicSync(PublicArchive $archive, Wallet $wallet): ArchiveAddress
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $ffi->uniffi_ant_ffi_fn_func_client_archive_put_public_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $archive->cloneForCall(),
+            $wallet->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+
+        // Parse PublicArchivePutResult: cost (String) + address (Arc<ArchiveAddress>)
+        $data = RustBuffer::toBytes($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        $offset = 0;
+
+        // Parse cost string (4-byte BE length + UTF-8 data)
+        $costLen = unpack('N', substr($data, $offset, 4))[1];
+        $offset += 4;
+        // Skip cost value - we don't need it for the return type
+        $offset += $costLen;
+
+        // Parse address pointer (8 bytes)
+        $ptrBytes = substr($data, $offset, 8);
+        $ptrValue = unpack('J', $ptrBytes)[1];
+        $addressHandle = $ffi->cast('void*', $ptrValue);
+
+        return new ArchiveAddress($addressHandle);
+    }
+
+    // =========================================================================
+    // File Operations
+    // =========================================================================
+
+    /**
+     * Upload a file as private (encrypted) data.
+     */
+    public function fileUploadSync(string $path, Wallet $wallet): PrivateDataPutResult
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $pathBuffer = RustBuffer::fromString($path);
+
+        $ffi->uniffi_ant_ffi_fn_func_client_file_upload_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $pathBuffer,
+            $wallet->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+        return self::parsePrivateUploadResult($resultBuffer);
+    }
+
+    /**
+     * Upload a file as public data.
+     */
+    public function fileUploadPublicSync(string $path, Wallet $wallet): DataPutResult
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+        $resultBuffer = $ffi->new('RustBuffer');
+
+        $pathBuffer = RustBuffer::fromString($path);
+
+        $ffi->uniffi_ant_ffi_fn_func_client_file_upload_public_blocking(
+            FFI::addr($resultBuffer),
+            $this->cloneForCall(),
+            $pathBuffer,
+            $wallet->cloneForCall(),
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+        return self::parseUploadResult($resultBuffer);
+    }
+
+    /**
+     * Download a private file to a local path.
+     */
+    public function fileDownloadSync(DataMapChunk $dataMap, string $destPath): void
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $pathBuffer = RustBuffer::fromString($destPath);
+
+        $ffi->uniffi_ant_ffi_fn_func_client_file_download_blocking(
+            $this->cloneForCall(),
+            $dataMap->cloneForCall(),
+            $pathBuffer,
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+    }
+
+    /**
+     * Download a public file to a local path.
+     */
+    public function fileDownloadPublicSync(DataAddress $address, string $destPath): void
+    {
+        $ffi = FFILoader::get();
+        $status = $ffi->new('RustCallStatus');
+
+        $pathBuffer = RustBuffer::fromString($destPath);
+
+        $ffi->uniffi_ant_ffi_fn_func_client_file_download_public_blocking(
+            $this->cloneForCall(),
+            $address->cloneForCall(),
+            $pathBuffer,
+            FFI::addr($status)
+        );
+
+        RustBuffer::checkStatus($status);
+    }
+
+    // =========================================================================
+    // Helper Methods
+    // =========================================================================
+
+    /**
+     * Parse a PrivateDataPutResult from a RustBuffer.
+     * Result has: cost (String), data_map pointer (8 bytes BE)
+     */
+    private static function parsePrivateUploadResult(CData $resultBuffer): PrivateDataPutResult
+    {
+        $ffi = FFILoader::get();
+        $data = RustBuffer::toBytes($resultBuffer);
+        RustBuffer::free($resultBuffer);
+
+        $offset = 0;
+
+        // Parse cost string
+        $costLen = unpack('N', substr($data, $offset, 4))[1];
+        $offset += 4;
+        $cost = substr($data, $offset, $costLen);
+        $offset += $costLen;
+
+        // Parse data_map pointer (8 bytes big-endian)
+        $ptrBytes = substr($data, $offset, 8);
+        $ptrValue = unpack('J', $ptrBytes)[1];
+        $dataMapHandle = FFI::cast('void*', $ffi->new('uintptr_t', false));
+        $dataMapHandle = $ffi->cast('void*', $ptrValue);
+
+        return new PrivateDataPutResult(new DataMapChunk($dataMapHandle), $cost);
     }
 
     protected function freeHandle(): void

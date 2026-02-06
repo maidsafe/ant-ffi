@@ -408,7 +408,7 @@ uint64_t uniffi_ant_ffi_fn_method_client_file_upload_public(void *ptr, RustBuffe
 uint64_t uniffi_ant_ffi_fn_method_client_file_download_public(void *ptr, void *address, RustBuffer dest_path);
 uint64_t uniffi_ant_ffi_fn_method_client_file_upload(void *ptr, RustBuffer file_path, RustBuffer payment);
 uint64_t uniffi_ant_ffi_fn_method_client_file_download(void *ptr, void *data_map_chunk, RustBuffer dest_path);
-uint64_t uniffi_ant_ffi_fn_method_client_file_cost(void *ptr, RustBuffer file_path);
+uint64_t uniffi_ant_ffi_fn_method_client_file_cost(void *ptr, RustBuffer file_path, int8_t follow_symlinks, int8_t include_hidden);
 
 // =============================================================================
 // Client - Chunk Operations (Async)

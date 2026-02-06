@@ -6,13 +6,23 @@ import 'native/bindings.dart';
 import 'native/library.dart';
 import 'native/rust_buffer.dart';
 import 'native/async_future.dart';
+import 'types/address.dart';
+import 'types/chunk.dart';
 import 'types/data_address.dart';
+import 'types/data_map_chunk.dart';
 import 'types/network.dart';
 import 'types/wallet.dart';
+import 'types/pointer.dart';
+import 'types/scratchpad.dart';
+import 'types/register.dart';
+import 'types/graph_entry.dart';
+import 'types/vault.dart';
+import 'types/archive.dart';
+import 'types/secret_key.dart';
 
 late final _bindings = AntFfiBindings(antFfiLib);
 
-/// Result of a data upload operation.
+/// Result of a public data upload operation.
 class UploadResult {
   /// The address where the data was stored.
   final DataAddress address;
@@ -21,6 +31,28 @@ class UploadResult {
   final String cost;
 
   UploadResult(this.address, this.cost);
+}
+
+/// Result of a private data upload operation.
+class PrivateUploadResult {
+  /// The data map for decrypting the uploaded data.
+  final DataMapChunk dataMap;
+
+  /// The cost of the upload (as a string representation of the amount).
+  final String cost;
+
+  PrivateUploadResult(this.dataMap, this.cost);
+}
+
+/// Result of a chunk put operation.
+class ChunkPutResult {
+  /// The address of the stored chunk.
+  final ChunkAddress address;
+
+  /// The cost of the operation.
+  final String cost;
+
+  ChunkPutResult(this.address, this.cost);
 }
 
 /// A client for interacting with the Autonomi network.
@@ -196,6 +228,479 @@ class Client {
     return result;
   }
 
+  // ==========================================================================
+  // Private Data Operations
+  // ==========================================================================
+
+  /// Uploads private (encrypted) data to the network.
+  ///
+  /// Data is self-encrypted before uploading. Returns a DataMapChunk needed
+  /// to retrieve the data.
+  Future<PrivateUploadResult> dataPut(Uint8List data, Wallet wallet) async {
+    _checkNotDisposed();
+
+    final dataBuffer = uint8ListToRustBuffer(data);
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_data_put(
+      _clone(),
+      dataBuffer,
+      paymentBuffer,
+    );
+
+    final resultBuffer = await pollRustBufferAsync(futureHandle);
+
+    // Deserialize DataPutResult: cost string + pointer
+    final resultData = resultBuffer.data.cast<Uint8>().asTypedList(resultBuffer.len);
+
+    // Read cost string
+    final costLen = (resultData[0] << 24) |
+        (resultData[1] << 16) |
+        (resultData[2] << 8) |
+        resultData[3];
+    final cost = utf8.decode(resultData.sublist(4, 4 + costLen));
+
+    // Read data_map pointer (8 bytes big-endian)
+    final offset = 4 + costLen;
+    final ptrValue = _readPointer(resultData, offset);
+    final dataMapHandle = Pointer<Void>.fromAddress(ptrValue);
+
+    resultBuffer.free();
+
+    return PrivateUploadResult(DataMapChunk.fromHandle(dataMapHandle), cost);
+  }
+
+  /// Downloads private (encrypted) data from the network.
+  ///
+  /// Takes a DataMapChunk (from dataPut) and returns the decrypted data.
+  Future<Uint8List> dataGet(DataMapChunk dataMap) async {
+    _checkNotDisposed();
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_data_get(
+      _clone(),
+      dataMap.cloneHandle(),
+    );
+
+    final resultBuffer = await pollRustBufferAsync(futureHandle);
+    final result = rustBufferToUint8ListWithPrefix(resultBuffer);
+    resultBuffer.free();
+
+    return result;
+  }
+
+  // ==========================================================================
+  // Chunk Operations
+  // ==========================================================================
+
+  /// Gets a chunk from the network by address.
+  Future<Chunk> chunkGet(ChunkAddress address) async {
+    _checkNotDisposed();
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_chunk_get(
+      _clone(),
+      address.cloneHandle(),
+    );
+
+    final handle = await pollPointerAsync(futureHandle);
+    return Chunk.fromHandle(handle);
+  }
+
+  /// Stores a chunk on the network.
+  Future<ChunkPutResult> chunkPut(Uint8List data, Wallet wallet) async {
+    _checkNotDisposed();
+
+    final dataBuffer = uint8ListToRustBuffer(data);
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_chunk_put(
+      _clone(),
+      dataBuffer,
+      paymentBuffer,
+    );
+
+    final resultBuffer = await pollRustBufferAsync(futureHandle);
+
+    // Deserialize: cost string + address pointer
+    final resultData = resultBuffer.data.cast<Uint8>().asTypedList(resultBuffer.len);
+
+    final costLen = (resultData[0] << 24) |
+        (resultData[1] << 16) |
+        (resultData[2] << 8) |
+        resultData[3];
+    final cost = utf8.decode(resultData.sublist(4, 4 + costLen));
+
+    final offset = 4 + costLen;
+    final ptrValue = _readPointer(resultData, offset);
+    final addressHandle = Pointer<Void>.fromAddress(ptrValue);
+
+    resultBuffer.free();
+
+    return ChunkPutResult(ChunkAddress.fromHandle(addressHandle), cost);
+  }
+
+  // ==========================================================================
+  // Pointer Operations
+  // ==========================================================================
+
+  /// Gets a network pointer by address.
+  Future<NetworkPointer> pointerGet(PointerAddress address) async {
+    _checkNotDisposed();
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_pointer_get(
+      _clone(),
+      address.cloneHandle(),
+    );
+
+    final handle = await pollPointerAsync(futureHandle);
+    return NetworkPointer.fromHandle(handle);
+  }
+
+  /// Stores a network pointer.
+  Future<void> pointerPut(NetworkPointer pointer, Wallet wallet) async {
+    _checkNotDisposed();
+
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_pointer_put(
+      _clone(),
+      pointer.cloneHandle(),
+      paymentBuffer,
+    );
+
+    await pollVoidAsync(futureHandle);
+  }
+
+  // ==========================================================================
+  // Scratchpad Operations
+  // ==========================================================================
+
+  /// Gets a scratchpad by address.
+  Future<Scratchpad> scratchpadGet(ScratchpadAddress address) async {
+    _checkNotDisposed();
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_scratchpad_get(
+      _clone(),
+      address.cloneHandle(),
+    );
+
+    final handle = await pollPointerAsync(futureHandle);
+    return Scratchpad.fromHandle(handle);
+  }
+
+  /// Stores a scratchpad on the network.
+  Future<void> scratchpadPut(Scratchpad scratchpad, Wallet wallet) async {
+    _checkNotDisposed();
+
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_scratchpad_put(
+      _clone(),
+      scratchpad.cloneHandle(),
+      paymentBuffer,
+    );
+
+    await pollVoidAsync(futureHandle);
+  }
+
+  // ==========================================================================
+  // Register Operations
+  // ==========================================================================
+
+  /// Gets a register value by address.
+  Future<Uint8List> registerGet(RegisterAddress address) async {
+    _checkNotDisposed();
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_register_get(
+      _clone(),
+      address.cloneHandle(),
+    );
+
+    final resultBuffer = await pollRustBufferAsync(futureHandle);
+    final result = rustBufferToUint8ListWithPrefix(resultBuffer);
+    resultBuffer.free();
+
+    return result;
+  }
+
+  /// Creates a new register on the network.
+  Future<RegisterAddress> registerCreate(
+    Uint8List value,
+    SecretKey owner,
+    Wallet wallet,
+  ) async {
+    _checkNotDisposed();
+
+    final valueBuffer = uint8ListToRustBuffer(value);
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_register_create(
+      _clone(),
+      owner.cloneHandle(),
+      valueBuffer,
+      paymentBuffer,
+    );
+
+    final handle = await pollPointerAsync(futureHandle);
+    return RegisterAddress.fromHandle(handle);
+  }
+
+  /// Updates an existing register on the network.
+  Future<void> registerUpdate(
+    Uint8List value,
+    SecretKey owner,
+    Wallet wallet,
+  ) async {
+    _checkNotDisposed();
+
+    final valueBuffer = uint8ListToRustBuffer(value);
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_register_update(
+      _clone(),
+      owner.cloneHandle(),
+      valueBuffer,
+      paymentBuffer,
+    );
+
+    await pollVoidAsync(futureHandle);
+  }
+
+  // ==========================================================================
+  // Graph Entry Operations
+  // ==========================================================================
+
+  /// Gets a graph entry by address.
+  Future<GraphEntry> graphEntryGet(GraphEntryAddress address) async {
+    _checkNotDisposed();
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_graph_entry_get(
+      _clone(),
+      address.cloneHandle(),
+    );
+
+    final handle = await pollPointerAsync(futureHandle);
+    return GraphEntry.fromHandle(handle);
+  }
+
+  /// Stores a graph entry on the network.
+  Future<void> graphEntryPut(GraphEntry entry, Wallet wallet) async {
+    _checkNotDisposed();
+
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_graph_entry_put(
+      _clone(),
+      entry.cloneHandle(),
+      paymentBuffer,
+    );
+
+    await pollVoidAsync(futureHandle);
+  }
+
+  // ==========================================================================
+  // Vault Operations
+  // ==========================================================================
+
+  /// Gets user data from a vault.
+  Future<UserData> vaultGetUserData(VaultSecretKey secretKey) async {
+    _checkNotDisposed();
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_vault_get_user_data(
+      _clone(),
+      secretKey.cloneHandle(),
+    );
+
+    final handle = await pollPointerAsync(futureHandle);
+    return UserData.fromHandle(handle);
+  }
+
+  /// Stores user data to a vault.
+  Future<void> vaultPutUserData(
+    VaultSecretKey secretKey,
+    UserData userData,
+    Wallet wallet,
+  ) async {
+    _checkNotDisposed();
+
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_vault_put_user_data(
+      _clone(),
+      secretKey.cloneHandle(),
+      paymentBuffer,
+      userData.cloneHandle(),
+    );
+
+    await pollVoidAsync(futureHandle);
+  }
+
+  /// Gets user data from a vault.
+  /// This is an alias for [vaultGetUserData].
+  Future<UserData> vaultGet(VaultSecretKey secretKey) {
+    return vaultGetUserData(secretKey);
+  }
+
+  /// Stores user data to a vault.
+  /// This is an alias for [vaultPutUserData].
+  Future<void> vaultPut(
+    VaultSecretKey secretKey,
+    UserData userData,
+    Wallet wallet,
+  ) {
+    return vaultPutUserData(secretKey, userData, wallet);
+  }
+
+  // ==========================================================================
+  // Archive Operations
+  // ==========================================================================
+
+  /// Gets a public archive by address.
+  Future<PublicArchive> archiveGetPublic(ArchiveAddress address) async {
+    _checkNotDisposed();
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_archive_get_public(
+      _clone(),
+      address.cloneHandle(),
+    );
+
+    final handle = await pollPointerAsync(futureHandle);
+    return PublicArchive.fromHandle(handle);
+  }
+
+  /// Stores a public archive on the network.
+  Future<ArchiveAddress> archivePutPublic(PublicArchive archive, Wallet wallet) async {
+    _checkNotDisposed();
+
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_archive_put_public(
+      _clone(),
+      archive.cloneHandle(),
+      paymentBuffer,
+    );
+
+    final handle = await pollPointerAsync(futureHandle);
+    return ArchiveAddress.fromHandle(handle);
+  }
+
+  // ==========================================================================
+  // File Operations
+  // ==========================================================================
+
+  /// Uploads a file to the network as public data.
+  Future<UploadResult> fileUploadPublic(String filePath, Wallet wallet) async {
+    _checkNotDisposed();
+
+    final pathBuffer = stringToRustBuffer(filePath);
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_file_upload_public(
+      _clone(),
+      pathBuffer,
+      paymentBuffer,
+    );
+
+    final resultBuffer = await pollRustBufferAsync(futureHandle);
+
+    // Deserialize: cost string + address pointer
+    final resultData = resultBuffer.data.cast<Uint8>().asTypedList(resultBuffer.len);
+
+    final costLen = (resultData[0] << 24) |
+        (resultData[1] << 16) |
+        (resultData[2] << 8) |
+        resultData[3];
+    final cost = utf8.decode(resultData.sublist(4, 4 + costLen));
+
+    final offset = 4 + costLen;
+    final ptrValue = _readPointer(resultData, offset);
+    final addressHandle = Pointer<Void>.fromAddress(ptrValue);
+
+    resultBuffer.free();
+
+    return UploadResult(DataAddress.fromHandle(addressHandle), cost);
+  }
+
+  /// Downloads a file from the network (public data) to a local path.
+  Future<void> fileDownloadPublic(DataAddress address, String destPath) async {
+    _checkNotDisposed();
+
+    final pathBuffer = stringToRustBuffer(destPath);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_file_download_public(
+      _clone(),
+      address.cloneHandle(),
+      pathBuffer,
+    );
+
+    await pollVoidAsync(futureHandle);
+  }
+
+  /// Uploads a file to the network as private (encrypted) data.
+  Future<PrivateUploadResult> fileUpload(String filePath, Wallet wallet) async {
+    _checkNotDisposed();
+
+    final pathBuffer = stringToRustBuffer(filePath);
+    final paymentBuffer = _lowerPaymentOption(wallet);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_file_upload(
+      _clone(),
+      pathBuffer,
+      paymentBuffer,
+    );
+
+    final resultBuffer = await pollRustBufferAsync(futureHandle);
+
+    // Deserialize: cost string + data_map pointer
+    final resultData = resultBuffer.data.cast<Uint8>().asTypedList(resultBuffer.len);
+
+    final costLen = (resultData[0] << 24) |
+        (resultData[1] << 16) |
+        (resultData[2] << 8) |
+        resultData[3];
+    final cost = utf8.decode(resultData.sublist(4, 4 + costLen));
+
+    final offset = 4 + costLen;
+    final ptrValue = _readPointer(resultData, offset);
+    final dataMapHandle = Pointer<Void>.fromAddress(ptrValue);
+
+    resultBuffer.free();
+
+    return PrivateUploadResult(DataMapChunk.fromHandle(dataMapHandle), cost);
+  }
+
+  /// Downloads a file from the network (private data) to a local path.
+  Future<void> fileDownload(DataMapChunk dataMap, String destPath) async {
+    _checkNotDisposed();
+
+    final pathBuffer = stringToRustBuffer(destPath);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_file_download(
+      _clone(),
+      dataMap.cloneHandle(),
+      pathBuffer,
+    );
+
+    await pollVoidAsync(futureHandle);
+  }
+
+  /// Gets the estimated cost to upload a file.
+  Future<String> fileCost(String filePath) async {
+    _checkNotDisposed();
+
+    final pathBuffer = stringToRustBuffer(filePath);
+
+    final futureHandle = _bindings.uniffi_ant_ffi_fn_method_client_file_cost(
+      _clone(),
+      pathBuffer,
+    );
+
+    final resultBuffer = await pollRustBufferAsync(futureHandle);
+    final result = rustBufferToString(resultBuffer);
+    resultBuffer.free();
+
+    return result;
+  }
+
   /// Releases the native resources associated with this client.
   void dispose() {
     if (_disposed) return;
@@ -327,4 +832,16 @@ RustBuffer _serializeOptionString(String? value) {
   data.setRange(offset, offset + bytes.length, bytes);
 
   return rawBytesToRustBuffer(data);
+}
+
+/// Reads an 8-byte big-endian pointer value from data at the given offset.
+int _readPointer(Uint8List data, int offset) {
+  return ((data[offset] & 0xFF) << 56) |
+      ((data[offset + 1] & 0xFF) << 48) |
+      ((data[offset + 2] & 0xFF) << 40) |
+      ((data[offset + 3] & 0xFF) << 32) |
+      ((data[offset + 4] & 0xFF) << 24) |
+      ((data[offset + 5] & 0xFF) << 16) |
+      ((data[offset + 6] & 0xFF) << 8) |
+      (data[offset + 7] & 0xFF);
 }

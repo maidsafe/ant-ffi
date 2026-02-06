@@ -36,6 +36,9 @@ class ChunkAddress {
     }
   }
 
+  /// Returns a cloned handle for use by other types (e.g., PointerTarget).
+  Pointer<Void> cloneHandle() => _clone();
+
   /// Creates a chunk address from a hex-encoded string.
   ///
   /// Throws [AntFfiException] if the hex string is invalid.

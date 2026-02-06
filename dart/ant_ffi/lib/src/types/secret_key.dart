@@ -30,6 +30,9 @@ class SecretKey {
     }
   }
 
+  /// Returns a cloned handle for use by other types (e.g., key derivation).
+  Pointer<Void> cloneHandle() => _clone();
+
   /// Creates a new random secret key.
   ///
   /// Example:
