@@ -1,0 +1,61 @@
+name: Dart CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-dart-build
+      cancel-in-progress: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Dart
+      uses: dart-lang/setup-dart@v1
+      with:
+        sdk: '3.2.0'
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Cargo dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: rust
+
+    - name: Build Rust FFI library
+      run: cargo build --release
+      working-directory: rust
+
+    - name: Generate C header
+      run: |
+        cargo run -p uniffi-bindgen-swift -- \
+          --headers \
+          target/release/libant_ffi.so \
+          ../dart/c_header \
+          --module-name ant_ffiFFI
+      working-directory: rust
+
+    - name: Install Dart dependencies
+      run: dart pub get
+      working-directory: dart/ant_ffi
+
+    - name: Generate FFI bindings
+      run: dart run ffigen
+      working-directory: dart/ant_ffi
+
+    - name: Analyze Dart code
+      run: dart analyze
+      working-directory: dart/ant_ffi
+
+    - name: Run tests
+      run: dart test
+      working-directory: dart/ant_ffi
+      env:
+        LD_LIBRARY_PATH: ${{ github.workspace }}/rust/target/release
