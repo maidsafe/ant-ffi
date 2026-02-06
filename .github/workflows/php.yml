@@ -3,8 +3,16 @@ name: PHP CI
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'php/**'
+      - 'rust/**'
+      - '.github/workflows/php.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'php/**'
+      - 'rust/**'
+      - '.github/workflows/php.yml'
 
 jobs:
   build:

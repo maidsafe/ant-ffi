@@ -3,8 +3,16 @@ name: Dart CI
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'dart/**'
+      - 'rust/**'
+      - '.github/workflows/dart.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'dart/**'
+      - 'rust/**'
+      - '.github/workflows/dart.yml'
 
 jobs:
   build:
