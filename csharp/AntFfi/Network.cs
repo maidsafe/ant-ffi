@@ -46,15 +46,17 @@ public sealed class Network : NativeHandle
     /// <param name="rpcUrl">RPC URL for the EVM network (e.g., "http://10.0.2.2:61611").</param>
     /// <param name="paymentTokenAddress">Payment token contract address (hex string).</param>
     /// <param name="dataPaymentsAddress">Data payments contract address (hex string).</param>
+    /// <param name="royaltiesPkHex">Optional royalties public key (hex string).</param>
     /// <returns>A new Network instance.</returns>
-    public static Network CreateCustom(string rpcUrl, string paymentTokenAddress, string dataPaymentsAddress)
+    public static Network CreateCustom(string rpcUrl, string paymentTokenAddress, string dataPaymentsAddress, string? royaltiesPkHex = null)
     {
         var rpcUrlBuffer = UniFFIHelpers.StringToRustBuffer(rpcUrl);
         var paymentTokenBuffer = UniFFIHelpers.StringToRustBuffer(paymentTokenAddress);
         var dataPaymentsBuffer = UniFFIHelpers.StringToRustBuffer(dataPaymentsAddress);
+        var royaltiesBuffer = UniFFIHelpers.OptionStringToRustBuffer(royaltiesPkHex);
 
         var status = RustCallStatus.Create();
-        var handle = NativeMethods.NetworkCustom(rpcUrlBuffer, paymentTokenBuffer, dataPaymentsBuffer, ref status);
+        var handle = NativeMethods.NetworkCustom(rpcUrlBuffer, paymentTokenBuffer, dataPaymentsBuffer, royaltiesBuffer, ref status);
         if (status.IsError)
             throw new NetworkException("Failed to create custom network", status);
         return new Network(handle, true);
