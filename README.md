@@ -11,6 +11,7 @@ Multi-platform bindings for the Autonomi network.
 | C#/.NET | C# | Available |
 | Lua | LuaJIT | Available |
 | Dart/Flutter | Dart | Available |
+| Go | Go | Available |
 | C/C++ | C | Available |
 
 ## Android
@@ -425,6 +426,68 @@ For comprehensive usage examples, see the test files in [`dart/ant_ffi/test/`](d
 The same bindings work for Flutter apps. Add the native library to your platform-specific directories:
 - Android: `android/app/src/main/jniLibs/<arch>/libant_ffi.so`
 - iOS: Link as a static library or framework
+
+## Go
+
+Go bindings using CGO to call the native Rust FFI library.
+
+### Prerequisites
+
+- Go 1.21 or later
+- CGO enabled (`CGO_ENABLED=1`)
+- C compiler (GCC/Clang on Linux/macOS, MinGW on Windows)
+- The native `ant_ffi` shared library built from source
+
+### Quick Start
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "github.com/maidsafe/ant-ffi/go/antffi"
+)
+
+func main() {
+    // Encrypt and decrypt data locally
+    data := []byte("Hello, Autonomi!")
+    encrypted, _ := antffi.Encrypt(data)
+    decrypted, _ := antffi.Decrypt(encrypted)
+    fmt.Println(string(decrypted)) // "Hello, Autonomi!"
+
+    // Initialize client (when network is available)
+    ctx := context.Background()
+    client, _ := antffi.NewClientLocal(ctx)
+    defer client.Free()
+
+    // Create a wallet
+    network, _ := antffi.NewNetwork(true) // local network
+    defer network.Free()
+    wallet, _ := antffi.NewWalletFromPrivateKey(network, "your-private-key")
+    defer wallet.Free()
+
+    // Upload data
+    payment := &antffi.PaymentOption{Wallet: wallet}
+    result, _ := client.DataPutPublic(ctx, []byte("Hello Autonomi!"), payment)
+    fmt.Printf("Uploaded to: %s\n", result.Address)
+
+    // Download data
+    downloaded, _ := client.DataGetPublic(ctx, result.Address)
+    fmt.Printf("Downloaded: %s\n", string(downloaded))
+}
+```
+
+### Usage Examples
+
+For comprehensive usage examples, see the test files in [`go/antffi_test/`](go/antffi_test/):
+
+| Test File | Features Covered |
+|-----------|------------------|
+| `client_test.go` | Client init, data upload/download, pointers, wallets |
+| `keys_test.go` | Secret keys, public keys, main secret keys, key derivation |
+| `data_test.go` | Chunks, addresses, data map operations |
+| `selfencryption_test.go` | Self-encryption, decryption, byte round-trips |
 
 ## C/C++
 

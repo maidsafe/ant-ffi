@@ -106,3 +106,8 @@ dart/ant_ffi/*.dll
 dart/ant_ffi/*.so
 dart/ant_ffi/*.dylib
 dart/c_header/
+
+# Go bindings
+go/antffi_test/*.dll
+go/antffi_test/*.so
+go/antffi_test/*.dylib
