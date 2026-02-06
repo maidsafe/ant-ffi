@@ -1625,3 +1625,107 @@ pub fn scratchpad_verify(scratchpad: Arc<Scratchpad>) -> Result<(), ClientError>
         reason: e.to_string(),
     })
 }
+
+// =============================================================================
+// Blocking (synchronous) wrapper functions for languages without async support
+// =============================================================================
+
+use std::sync::OnceLock;
+
+/// Global Tokio runtime for blocking operations.
+/// Using a shared runtime ensures network connections stay alive between calls.
+static BLOCKING_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+fn get_blocking_runtime() -> &'static tokio::runtime::Runtime {
+    BLOCKING_RUNTIME.get_or_init(|| {
+        tokio::runtime::Runtime::new().expect("Failed to create global Tokio runtime")
+    })
+}
+
+/// Initialize a client connected to local testnet (blocking/synchronous).
+/// Use this for languages like PHP that don't support async callbacks.
+#[uniffi::export]
+pub fn client_init_local_blocking() -> Result<Arc<Client>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let client = autonomi::Client::init_local().await.map_err(|e| {
+            ClientError::InitializationFailed {
+                reason: e.to_string(),
+            }
+        })?;
+
+        Ok(Arc::new(Client {
+            inner: Arc::new(client),
+        }))
+    })
+}
+
+/// Upload public data to the network (blocking/synchronous).
+/// Takes wallet directly instead of PaymentOption for simpler FFI.
+#[uniffi::export]
+pub fn client_data_put_public_blocking(
+    client: Arc<Client>,
+    data: Vec<u8>,
+    wallet: Arc<Wallet>,
+) -> Result<UploadResult, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let bytes = Bytes::from(data);
+        let autonomi_payment = AutonomiPaymentOption::Wallet(wallet.inner.clone());
+
+        let (price, address) = client
+            .inner
+            .data_put_public(bytes, autonomi_payment)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(UploadResult {
+            price: price.to_string(),
+            address: address.to_hex(),
+        })
+    })
+}
+
+/// Fetch public data from the network (blocking/synchronous).
+#[uniffi::export]
+pub fn client_data_get_public_blocking(
+    client: Arc<Client>,
+    address_hex: String,
+) -> Result<Vec<u8>, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let data_address =
+            data::DataAddress::from_hex(address_hex).map_err(|e| ClientError::InvalidAddress {
+                reason: e.to_string(),
+            })?;
+
+        let bytes = client
+            .inner
+            .data_get_public(&data_address.inner)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(bytes.to_vec())
+    })
+}
+
+/// Get the estimated cost to store data (blocking/synchronous).
+#[uniffi::export]
+pub fn client_data_cost_blocking(
+    client: Arc<Client>,
+    data: Vec<u8>,
+) -> Result<String, ClientError> {
+    get_blocking_runtime().block_on(async {
+        let bytes = Bytes::from(data);
+        let cost = client
+            .inner
+            .data_cost(bytes)
+            .await
+            .map_err(|e| ClientError::NetworkError {
+                reason: e.to_string(),
+            })?;
+
+        Ok(cost.to_string())
+    })
+}

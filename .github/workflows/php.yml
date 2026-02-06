@@ -1,0 +1,48 @@
+name: PHP CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-php-build
+      cancel-in-progress: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: ffi
+
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache Cargo dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: rust
+
+    - name: Build Rust FFI library
+      run: cargo build --release
+      working-directory: rust
+
+    - name: Copy native library
+      run: cp rust/target/release/libant_ffi.so php/ant_ffi/
+
+    - name: Install Composer dependencies
+      run: composer install
+      working-directory: php/ant_ffi
+
+    - name: Run unit tests
+      run: vendor/bin/phpunit --testsuite Unit
+      working-directory: php/ant_ffi
+      env:
+        LD_LIBRARY_PATH: ${{ github.workspace }}/php/ant_ffi

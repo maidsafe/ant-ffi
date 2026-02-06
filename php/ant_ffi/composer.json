@@ -1,0 +1,26 @@
+{
+    "name": "autonomi/ant-ffi",
+    "description": "PHP FFI bindings for the Autonomi network",
+    "type": "library",
+    "license": "BSD-3-Clause",
+    "require": {
+        "php": ">=8.1",
+        "ext-ffi": "*",
+        "react/promise": "^3.0",
+        "react/event-loop": "^1.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0",
+        "react/async": "^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "AntFfi\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AntFfi\\Tests\\": "tests/"
+        }
+    }
+}

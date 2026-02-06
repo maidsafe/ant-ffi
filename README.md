@@ -12,6 +12,7 @@ Multi-platform bindings for the Autonomi network.
 | Lua | LuaJIT | Available |
 | Dart/Flutter | Dart | Available |
 | Go | Go | Available |
+| PHP | PHP 8.1+ | Available |
 | C/C++ | C | Available |
 
 ## Android
@@ -488,6 +489,81 @@ For comprehensive usage examples, see the test files in [`go/antffi_test/`](go/a
 | `keys_test.go` | Secret keys, public keys, main secret keys, key derivation |
 | `data_test.go` | Chunks, addresses, data map operations |
 | `selfencryption_test.go` | Self-encryption, decryption, byte round-trips |
+
+## PHP
+
+PHP bindings using PHP FFI for the Autonomi network.
+
+### Prerequisites
+
+- PHP 8.1 or later with FFI extension enabled
+- The native `ant_ffi` shared library built from source
+
+### Installation
+
+```bash
+# Enable FFI in php.ini
+extension=ffi
+ffi.enable=true
+
+# Copy native library to php/ant_ffi/
+cp rust/target/release/ant_ffi.dll php/ant_ffi/  # Windows
+cp rust/target/release/libant_ffi.so php/ant_ffi/  # Linux
+cp rust/target/release/libant_ffi.dylib php/ant_ffi/  # macOS
+```
+
+### Quick Start
+
+```php
+<?php
+require_once 'vendor/autoload.php';
+
+use AntFfi\SelfEncryption;
+use AntFfi\Types\SecretKey;
+use AntFfi\Types\Network;
+use AntFfi\Types\Wallet;
+use AntFfi\Types\Client;
+
+// Encrypt and decrypt data locally
+$encrypted = SelfEncryption::encrypt("Hello, Autonomi!");
+$decrypted = SelfEncryption::decryptToString($encrypted);
+echo $decrypted; // "Hello, Autonomi!"
+
+// Generate keys
+$secretKey = SecretKey::random();
+$publicKey = $secretKey->publicKey();
+echo "Public key: " . $publicKey->toHex() . "\n";
+
+// Initialize client (when network is available)
+$network = Network::local();
+$client = Client::initLocalSync();
+
+// Create a wallet
+$wallet = Wallet::fromPrivateKey($network, "your-private-key");
+
+// Get cost estimate before upload
+$data = "Hello Autonomi!";
+$cost = $client->dataCostSync($data);
+echo "Estimated cost: $cost\n";
+
+// Upload data
+$address = $client->dataPutPublicSync($data, $wallet);
+echo "Uploaded to: " . $address->toHex() . "\n";
+
+// Download data
+$downloaded = $client->dataGetPublicSync($address->toHex());
+echo "Downloaded: $downloaded\n";
+```
+
+### Usage Examples
+
+For comprehensive usage examples, see the test files in [`php/ant_ffi/tests/`](php/ant_ffi/tests/):
+
+| Test File | Features Covered |
+|-----------|------------------|
+| `SelfEncryptionTest.php` | Self-encryption, decryption |
+| `KeysTest.php` | Secret keys, public keys, key derivation |
+| `DataTypesTest.php` | Chunks, addresses, data operations |
 
 ## C/C++
 

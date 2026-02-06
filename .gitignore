@@ -111,3 +111,10 @@ dart/c_header/
 go/antffi_test/*.dll
 go/antffi_test/*.so
 go/antffi_test/*.dylib
+
+# PHP bindings
+php/ant_ffi/*.dll
+php/ant_ffi/*.so
+php/ant_ffi/*.dylib
+php/ant_ffi/vendor/
+php/ant_ffi/composer.lock
