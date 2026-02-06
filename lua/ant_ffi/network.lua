@@ -57,15 +57,17 @@ end
   @param rpc_url (string) - RPC endpoint URL
   @param payment_token_address (string) - Payment token contract address
   @param data_payments_address (string) - Data payments contract address
+  @param royalties_pk_hex (string or nil, optional) - Royalties public key hex string
   @return Network
 ]]
-function Network.custom(rpc_url, payment_token_address, data_payments_address)
+function Network.custom(rpc_url, payment_token_address, data_payments_address, royalties_pk_hex)
     assert(M._lib, "network not initialized")
     local rpc_buf = M._helpers.string_to_rustbuffer(rpc_url)
     local token_buf = M._helpers.string_to_rustbuffer(payment_token_address)
     local data_buf = M._helpers.string_to_rustbuffer(data_payments_address)
+    local royalties_buf = M._helpers.option_string_to_rustbuffer(royalties_pk_hex)
     local status = M._errors.new_status()
-    local handle = M._lib.uniffi_ant_ffi_fn_constructor_network_custom(rpc_buf, token_buf, data_buf, status)
+    local handle = M._lib.uniffi_ant_ffi_fn_constructor_network_custom(rpc_buf, token_buf, data_buf, royalties_buf, status)
     M._errors.check_status(status, "Network.custom")
     return Network._wrap(handle)
 end
