@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>AntFfi</RootNamespace>
+    <AssemblyName>AntFfi</AssemblyName>
+    <Version>0.1.0</Version>
+    <Authors>MaidSafe</Authors>
+    <Description>C# bindings for the Autonomi Network FFI library</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AntFfi.Tests" />
+  </ItemGroup>
+
+</Project>
